@@ -1,0 +1,10 @@
+const PAYMENT_METHODS = {
+  CARD: 'CARD',
+  WALLET: 'WALLET',
+  BANK_TRANSFER: 'BANK_TRANSFER',
+};
+
+module.exports = {
+  PAYMENT_METHODS,
+};
+
