@@ -31,7 +31,7 @@ const updatePaymentStatusSchema = {
     id: z.string().min(1),
   }),
   body: z.object({
-    status: z.nativeEnum(PAYMENT_STATUS),
+    status: z.enum(Object.values(PAYMENT_STATUS)),
   }),
 };
 
