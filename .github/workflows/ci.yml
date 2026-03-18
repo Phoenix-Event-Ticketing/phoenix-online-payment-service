@@ -1,0 +1,84 @@
+name: ci
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+      - name: Install
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Test (coverage)
+        run: npm run test:coverage
+
+  sonarcloud:
+    runs-on: ubuntu-latest
+    needs: build-test
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+      - name: Install
+        run: npm ci
+      - name: Test (coverage)
+        run: npm run test:coverage
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarcloud-github-action@v3
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+  trivy-fs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Trivy filesystem scan (SARIF)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: 'fs'
+          ignore-unfixed: true
+          format: 'sarif'
+          output: 'trivy-fs.sarif'
+          severity: 'CRITICAL,HIGH'
+      - name: Upload Trivy filesystem SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-fs.sarif'
+
+  trivy-image:
+    runs-on: ubuntu-latest
+    if: ${{ hashFiles('Dockerfile') != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t phoenix-payment-service:ci .
+      - name: Trivy image scan (SARIF)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: 'phoenix-payment-service:ci'
+          format: 'sarif'
+          output: 'trivy-image.sarif'
+          ignore-unfixed: true
+          severity: 'CRITICAL,HIGH'
+      - name: Upload Trivy image SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-image.sarif'
+

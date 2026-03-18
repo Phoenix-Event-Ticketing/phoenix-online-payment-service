@@ -16,7 +16,6 @@ function errorHandler(err, req, res, next) {
     err.message || (statusCode === 500 ? 'Internal server error' : 'Error');
 
   // Basic logging; a richer logger can be injected via req if desired
-  // eslint-disable-next-line no-console
   console.error('Error handler caught error', {
     message: err.message,
     code: err.code,

@@ -3,7 +3,7 @@ const { forbidden } = require('../common/errors');
 
 function authorize(allowedRoles = []) {
   return (req, res, next) => {
-    if (!req.user || !req.user.role) {
+    if (!req.user?.role) {
       return next(forbidden('Missing user role'));
     }
 

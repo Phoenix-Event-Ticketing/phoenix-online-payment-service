@@ -11,7 +11,7 @@ const required = (name, value) => {
 
 const env = {
   nodeEnv: process.env.NODE_ENV || 'development',
-  port: parseInt(process.env.PORT, 10) || 4002,
+  port: Number.parseInt(process.env.PORT, 10) || 4002,
   mongoUri: required('MONGO_URI', process.env.MONGO_URI),
   jwtSecret: required('JWT_SECRET', process.env.JWT_SECRET),
   bookingServiceBaseUrl:

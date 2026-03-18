@@ -5,7 +5,7 @@ const { unauthorized } = require('../common/errors');
 function authMiddleware(req, res, next) {
   const header = req.headers.authorization;
 
-  if (!header || !header.startsWith('Bearer ')) {
+  if (!header?.startsWith('Bearer ')) {
     return next(unauthorized('Missing Authorization header'));
   }
 
@@ -29,7 +29,7 @@ function authMiddleware(req, res, next) {
     };
 
     return next();
-  } catch (err) {
+  } catch {
     return next(unauthorized('Invalid or expired token'));
   }
 }

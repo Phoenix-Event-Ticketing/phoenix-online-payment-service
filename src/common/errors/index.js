@@ -1,19 +1,19 @@
 const AppError = require('./AppError');
 
-const badRequest = (message, code = 'BAD_REQUEST', details) =>
-  new AppError(message || 'Bad request', 400, code, details);
+const badRequest = (message, code, details) =>
+  new AppError(message || 'Bad request', 400, code || 'BAD_REQUEST', details);
 
-const unauthorized = (message, code = 'UNAUTHORIZED') =>
-  new AppError(message || 'Unauthorized', 401, code);
+const unauthorized = (message, code) =>
+  new AppError(message || 'Unauthorized', 401, code || 'UNAUTHORIZED');
 
-const forbidden = (message, code = 'FORBIDDEN') =>
-  new AppError(message || 'Forbidden', 403, code);
+const forbidden = (message, code) =>
+  new AppError(message || 'Forbidden', 403, code || 'FORBIDDEN');
 
-const notFound = (message, code = 'NOT_FOUND') =>
-  new AppError(message || 'Not found', 404, code);
+const notFound = (message, code) =>
+  new AppError(message || 'Not found', 404, code || 'NOT_FOUND');
 
-const conflict = (message, code = 'CONFLICT') =>
-  new AppError(message || 'Conflict', 409, code);
+const conflict = (message, code) =>
+  new AppError(message || 'Conflict', 409, code || 'CONFLICT');
 
 module.exports = {
   AppError,

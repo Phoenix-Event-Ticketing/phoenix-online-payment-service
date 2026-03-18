@@ -32,5 +32,6 @@ async function start() {
   }
 }
 
+// Top-level await requires ESM; this service is CommonJS. NOSONAR
 start();
 
