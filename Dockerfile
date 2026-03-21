@@ -11,4 +11,4 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY --chown=nodejs:nodejs . .
 USER nodejs
 EXPOSE 4002
-CMD ["node", "src/server.js"]
+CMD ["node", "src/server.mjs"]
