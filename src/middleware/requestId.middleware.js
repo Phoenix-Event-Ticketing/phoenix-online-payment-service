@@ -1,4 +1,4 @@
-const { randomUUID } = require('crypto');
+const { randomUUID } = require('node:crypto');
 
 /**
  * Correlates logs per request; accepts incoming X-Request-Id or generates one.

@@ -10,6 +10,19 @@ module.exports = [
       '.github/**',
     ],
   },
+  {
+    files: ['**/*.mjs'],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: 'module',
+      globals: {
+        process: 'readonly',
+      },
+    },
+    rules: {
+      'no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+    },
+  },
   js.configs.recommended,
   {
     files: ['**/*.js'],
