@@ -6,17 +6,33 @@ const client = axios.create({
   timeout: 5000,
 });
 
+function sanitizePathParam(value, fieldName) {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    throw new Error(`${fieldName} must be a non-empty string`);
+  }
+
+  // Accept common id characters only; reject traversal/control characters.
+  if (!/^[A-Za-z0-9_-]+$/.test(value)) {
+    throw new Error(`${fieldName} has invalid characters`);
+  }
+
+  return encodeURIComponent(value);
+}
+
 async function getBookingById(bookingId, token) {
-  const res = await client.get(`/api/bookings/${bookingId}`, {
+  const safeBookingId = sanitizePathParam(bookingId, 'bookingId');
+  const res = await client.get(`/api/bookings/${safeBookingId}`, {
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
   });
   return res.data?.data || res.data;
 }
 
 async function markBookingAsPaid(bookingId, paymentId, token) {
+  const safeBookingId = sanitizePathParam(bookingId, 'bookingId');
+  const safePaymentId = sanitizePathParam(paymentId, 'paymentId');
   const res = await client.patch(
-    `/api/bookings/${bookingId}/pay`,
-    { paymentId },
+    `/api/bookings/${safeBookingId}/pay`,
+    { paymentId: safePaymentId },
     {
       headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     },

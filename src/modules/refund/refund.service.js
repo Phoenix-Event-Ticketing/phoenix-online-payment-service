@@ -4,14 +4,26 @@ const { PAYMENT_STATUS } = require('../../common/constants/paymentStatus');
 const { Refund, REFUND_STATUS } = require('./refund.model');
 const { badRequest, notFound, forbidden } = require('../../common/errors');
 
+function asSafeString(value, fieldName) {
+  if (typeof value !== 'string') {
+    throw badRequest(`${fieldName} must be a string`, 'INVALID_INPUT_TYPE');
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    throw badRequest(`${fieldName} is required`, 'INVALID_INPUT');
+  }
+  return trimmed;
+}
+
 async function requestRefund(user, payload) {
   const { paymentId, refundAmount, refundReason } = payload;
+  const safePaymentId = asSafeString(paymentId, 'paymentId');
 
   if (refundAmount <= 0) {
     throw badRequest('Refund amount must be positive');
   }
 
-  const payment = await Payment.findOne({ paymentId });
+  const payment = await Payment.findOne({ paymentId: safePaymentId });
   if (!payment) {
     throw notFound('Payment not found');
   }
@@ -35,7 +47,7 @@ async function requestRefund(user, payload) {
   }
 
   const refund = await Refund.create({
-    paymentId,
+    paymentId: safePaymentId,
     userId: user.id,
     refundAmount,
     refundReason,
@@ -44,7 +56,7 @@ async function requestRefund(user, payload) {
 
   await PaymentAuditLog.create({
     eventType: 'REFUND_REQUESTED',
-    paymentId,
+    paymentId: safePaymentId,
     actorId: user.id,
     oldStatus: payment.status,
     newStatus: payment.status,
@@ -58,7 +70,10 @@ async function requestRefund(user, payload) {
 }
 
 async function processRefund(actor, refundId, status) {
-  const refund = await Refund.findOne({ refundId });
+  const safeRefundId = asSafeString(refundId, 'refundId');
+  const safeStatus = asSafeString(status, 'status');
+
+  const refund = await Refund.findOne({ refundId: safeRefundId });
   if (!refund) {
     throw notFound('Refund not found');
   }
@@ -67,16 +82,16 @@ async function processRefund(actor, refundId, status) {
     throw forbidden('Only admins can process refunds');
   }
 
-  if (!Object.values(REFUND_STATUS).includes(status)) {
+  if (!Object.values(REFUND_STATUS).includes(safeStatus)) {
     throw badRequest('Invalid refund status');
   }
 
   const oldStatus = refund.refundStatus;
-  refund.refundStatus = status;
+  refund.refundStatus = safeStatus;
   await refund.save();
 
   const payment = await Payment.findOne({ paymentId: refund.paymentId });
-  if (payment && status === REFUND_STATUS.COMPLETED) {
+  if (payment && safeStatus === REFUND_STATUS.COMPLETED) {
     const oldPaymentStatus = payment.status;
     payment.status = PAYMENT_STATUS.REFUNDED;
     await payment.save();
@@ -98,7 +113,7 @@ async function processRefund(actor, refundId, status) {
     paymentId: refund.paymentId,
     actorId: actor.id,
     oldStatus,
-    newStatus: status,
+    newStatus: safeStatus,
     metadata: {
       refundId: refund.refundId,
     },
@@ -108,7 +123,8 @@ async function processRefund(actor, refundId, status) {
 }
 
 async function getRefundById(user, refundId) {
-  const refund = await Refund.findOne({ refundId });
+  const safeRefundId = asSafeString(refundId, 'refundId');
+  const refund = await Refund.findOne({ refundId: safeRefundId });
   if (!refund) {
     throw notFound('Refund not found');
   }
@@ -121,7 +137,11 @@ async function getRefundById(user, refundId) {
 }
 
 async function getRefundsForPayment(user, paymentId) {
-  const query = user.role === 'ADMIN' ? { paymentId } : { paymentId, userId: user.id };
+  const safePaymentId = asSafeString(paymentId, 'paymentId');
+  const query =
+    user.role === 'ADMIN'
+      ? { paymentId: safePaymentId }
+      : { paymentId: safePaymentId, userId: user.id };
   return Refund.find(query).sort({ createdAt: -1 });
 }
 
