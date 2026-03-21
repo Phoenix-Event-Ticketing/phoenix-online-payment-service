@@ -25,8 +25,10 @@ jobs:
       - name: Test (coverage)
         run: npm run test:coverage
 
+  # Requires Dependency graph; private repos also need GitHub Advanced Security.
+  # Skipped for private repos unless repo variable ENABLE_DEPENDENCY_REVIEW == 'true'.
   dependency-review:
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' && (github.event.repository.private == false || vars.ENABLE_DEPENDENCY_REVIEW == 'true')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -65,7 +67,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - name: Trivy filesystem scan (SARIF)
-        uses: aquasecurity/trivy-action@915b19bbe73b92a6cf82a1bc12b087c9a19a5fe2 # v0.28.0
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
         with:
           scan-type: 'fs'
           ignore-unfixed: true
@@ -79,16 +81,18 @@ jobs:
 
   trivy-image:
     runs-on: ubuntu-latest
-    if: ${{ hashFiles('Dockerfile') != '' }}
     permissions:
       contents: read
       security-events: write
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      # hashFiles() is not valid in job-level `if:`; use step-level only.
       - name: Build image
+        if: ${{ hashFiles('Dockerfile') != '' }}
         run: docker build -t phoenix-payment-service:ci .
       - name: Trivy image scan (SARIF)
-        uses: aquasecurity/trivy-action@915b19bbe73b92a6cf82a1bc12b087c9a19a5fe2 # v0.28.0
+        if: ${{ hashFiles('Dockerfile') != '' }}
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
         with:
           image-ref: 'phoenix-payment-service:ci'
           format: 'sarif'
@@ -96,6 +100,7 @@ jobs:
           ignore-unfixed: true
           severity: 'CRITICAL,HIGH'
       - name: Upload Trivy image SARIF
+        if: ${{ hashFiles('Dockerfile') != '' }}
         uses: github/codeql-action/upload-sarif@ebcb5b36ded6beda4ceefea6a8bc4cc885255bb3 # v3.34.1
         with:
           sarif_file: 'trivy-image.sarif'
