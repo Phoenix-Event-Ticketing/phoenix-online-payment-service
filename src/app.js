@@ -1,7 +1,9 @@
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
+const env = require('./config/env');
 const { createHttpLogger } = require('./config/logger');
+const requestIdMiddleware = require('./middleware/requestId.middleware');
 const { globalRateLimit } = require('./middleware/rateLimit.middleware');
 const { notFoundHandler, errorHandler } = require('./middleware/error.middleware');
 
@@ -13,15 +15,20 @@ const refundRoutes = require('./modules/refund/refund.routes');
 function createApp() {
   const app = express();
 
+  app.use(requestIdMiddleware);
+
   // Security headers
   app.use(helmet());
 
   // CORS
   app.use(
     cors({
-      origin: '*', // can be restricted via env later
+      origin:
+        env.corsOrigin === '*'
+          ? '*'
+          : env.corsOrigin.split(',').map((o) => o.trim()),
       methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-Id'],
     }),
   );
 

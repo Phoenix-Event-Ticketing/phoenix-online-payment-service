@@ -1,5 +1,6 @@
 const { AppError } = require('../common/errors');
 const { error: sendError } = require('../common/utils/response');
+const { getLogger } = require('../config/logger');
 
 // 404 handler for unmatched routes
 function notFoundHandler(req, res, next) {
@@ -15,10 +16,11 @@ function errorHandler(err, req, res, next) {
   const message =
     err.message || (statusCode === 500 ? 'Internal server error' : 'Error');
 
-  // Basic logging; a richer logger can be injected via req if desired
-  console.error('Error handler caught error', {
+  const logger = getLogger();
+  logger.error('Request error', {
     message: err.message,
     code: err.code,
+    statusCode,
     stack: err.stack,
   });
 

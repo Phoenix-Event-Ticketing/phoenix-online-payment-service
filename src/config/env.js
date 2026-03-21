@@ -19,6 +19,8 @@ const env = {
   userServiceBaseUrl:
     process.env.USER_SERVICE_BASE_URL || 'http://localhost:4000',
   logLevel: process.env.LOG_LEVEL || 'info',
+  /** Comma-separated origins, or * for all (dev only in production prefer explicit list) */
+  corsOrigin: process.env.CORS_ORIGIN || '*',
 };
 
 module.exports = env;

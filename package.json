@@ -11,8 +11,8 @@
     "format": "prettier --write \"src/**/*.js\"",
     "test": "jest",
     "test:coverage": "jest --coverage --coverageReporters=lcov --coverageDirectory=coverage",
-    "test:unit": "jest --runInBand --selectProjects unit",
-    "test:integration": "jest --runInBand --selectProjects integration"
+    "test:unit": "jest --runInBand --testPathPattern=unit",
+    "test:integration": "jest --runInBand --testPathPattern=integration"
   },
   "keywords": [
     "payments",
@@ -36,6 +36,7 @@
     "morgan": "^1.10.0",
     "swagger-ui-express": "^5.0.0",
     "uuid": "^9.0.1",
+    "winston": "^3.19.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {

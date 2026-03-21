@@ -43,5 +43,6 @@ async function markBookingAsPaid(bookingId, paymentId, token) {
 module.exports = {
   getBookingById,
   markBookingAsPaid,
+  sanitizePathParam,
 };
 

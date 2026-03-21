@@ -4,7 +4,8 @@ const env = require('./env');
 async function connectDb(logger) {
   const mongoUri = env.mongoUri;
 
-  logger.info(`Connecting to MongoDB at ${mongoUri}`);
+  // Do not log full URI (credentials). Log intent only.
+  logger.info('Connecting to MongoDB');
 
   mongoose.connection.on('connected', () => {
     logger.info('MongoDB connected');

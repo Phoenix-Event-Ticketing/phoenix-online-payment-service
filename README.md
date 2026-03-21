@@ -90,6 +90,33 @@ curl -X POST http://localhost:4002/api/refunds \
   -d "{\"paymentId\":\"<paymentId>\",\"refundAmount\":50,\"refundReason\":\"test\"}"
 ```
 
-## SonarCloud + Trivy (GitHub Actions)
+## Logging
 
-- **SonarCloud**: requires `SONAR_TOKEN` secret and updating `sonar-project.properties` values:\n  - `sonar.organization`\n  - `sonar.projectKey`\n\n- **Trivy**:\n  - filesystem scan runs on every push/PR\n  - image scan runs automatically **only if** `Dockerfile` exists\n+
+- Logs are **structured JSON** (one object per line) on stdout/stderr with fields: `ts`, `level`, `msg`, `service`, `env`, plus optional metadata.
+- Set `LOG_LEVEL` to `error`, `warn`, `info`, or `debug`. HTTP access lines are logged with `type: "http_access"`.
+- **Do not** log secrets or full `MONGO_URI` (the DB layer only logs “Connecting to MongoDB”).
+
+## CI/CD (GitHub Actions)
+
+- **[`.github/workflows/ci.yml`](.github/workflows/ci.yml)** — on every push/PR: `npm ci`, **`npm audit`** (high+), **ESLint**, **Jest + coverage**, **SonarCloud** (with Quality Gate wait via `sonar-project.properties`), **Trivy** (filesystem + Docker image when `Dockerfile` exists).
+- **[`.github/workflows/cd.yml`](.github/workflows/cd.yml)** — on semver tags `v*.*.*` (or manual dispatch): build and push image to **GHCR** (`ghcr.io/<owner>/<repo>`).
+
+### Required secrets / config
+
+- **SonarCloud**: GitHub secret `SONAR_TOKEN`; set `sonar.organization` and `sonar.projectKey` in [`sonar-project.properties`](sonar-project.properties).
+- **GHCR**: uses default `GITHUB_TOKEN` from the workflow (packages write permission on the CD job).
+
+### Local checks (same as CI)
+
+```bash
+npm ci
+npm audit --audit-level=high
+npm run lint
+npm run test:coverage
+```
+
+## SonarCloud + Trivy (summary)
+
+- **SonarCloud**: Quality Gate waits on analysis when `sonar.qualitygate.wait=true`.
+- **Trivy**: filesystem scan on every run; image scan when `Dockerfile` is present.
+

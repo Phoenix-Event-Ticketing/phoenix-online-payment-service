@@ -1,0 +1,27 @@
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    ports:
+      - '27017:27017'
+    volumes:
+      - mongo_data:/data/db
+
+  payment-service:
+    build: .
+    ports:
+      - '4002:4002'
+    environment:
+      NODE_ENV: production
+      PORT: '4002'
+      MONGO_URI: mongodb://mongo:27017/phoenix_payment_service
+      JWT_SECRET: ${JWT_SECRET:-change_me_in_real_env}
+      BOOKING_SERVICE_BASE_URL: ${BOOKING_SERVICE_BASE_URL:-http://host.docker.internal:4001}
+      USER_SERVICE_BASE_URL: ${USER_SERVICE_BASE_URL:-http://host.docker.internal:4000}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      CORS_ORIGIN: ${CORS_ORIGIN:-*}
+    depends_on:
+      - mongo
+
+volumes:
+  mongo_data:

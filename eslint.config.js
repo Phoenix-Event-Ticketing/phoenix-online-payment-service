@@ -1,6 +1,15 @@
 const js = require('@eslint/js');
 
 module.exports = [
+  {
+    ignores: [
+      'node_modules/**',
+      'coverage/**',
+      'dist/**',
+      'build/**',
+      '.github/**',
+    ],
+  },
   js.configs.recommended,
   {
     files: ['**/*.js'],
@@ -28,7 +37,20 @@ module.exports = [
     },
   },
   {
-    files: ['src/tests/**/*.js'],
+    files: ['src/tests/**/*.js', 'jest.config.js'],
+    languageOptions: {
+      globals: {
+        describe: 'readonly',
+        it: 'readonly',
+        test: 'readonly',
+        expect: 'readonly',
+        jest: 'readonly',
+        beforeEach: 'readonly',
+        afterEach: 'readonly',
+        beforeAll: 'readonly',
+        afterAll: 'readonly',
+      },
+    },
     rules: {
       'no-unused-vars': 'off',
     },
