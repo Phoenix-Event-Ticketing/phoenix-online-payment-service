@@ -57,6 +57,7 @@ jobs:
 
       - name: Dependency Review
         uses: actions/dependency-review-action@v4
+        continue-on-error: true  # Skip if Dependency graph is not enabled in repo settings
 
   sonar:
     name: SonarQube Cloud Analysis + Quality Gate

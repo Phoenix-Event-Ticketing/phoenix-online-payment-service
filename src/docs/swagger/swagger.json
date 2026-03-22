@@ -3,8 +3,14 @@
   "info": {
     "title": "Phoenix Payment Service API",
     "version": "1.0.0",
-    "description": "Minimal OpenAPI definition for the Phoenix Payment microservice. This file will be expanded with full schemas and endpoints."
+    "description": "OpenAPI definition for the Phoenix Payment microservice. Expand `paths` with full schemas and operations as the API evolves."
   },
+  "servers": [
+    {
+      "url": "/",
+      "description": "Current server (same origin as this UI)"
+    }
+  ],
   "paths": {},
   "components": {
     "securitySchemes": {

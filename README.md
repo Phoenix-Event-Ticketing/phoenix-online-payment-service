@@ -22,6 +22,8 @@ npm run dev
 
 See `end_api.txt`.
 
+**OpenAPI / Swagger UI (browser):** with the server running, open [http://localhost:4002/api-docs](http://localhost:4002/api-docs) (default port from `PORT` / `4002`). Raw spec: `/api-docs/swagger.json`.
+
 ## Testing APIs with a dummy JWT (local)
 
 This service verifies JWTs using `JWT_SECRET` and reads:

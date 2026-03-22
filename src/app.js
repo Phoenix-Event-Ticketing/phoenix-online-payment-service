@@ -11,11 +11,15 @@ const { notFoundHandler, errorHandler } = require('./middleware/error.middleware
 const healthRoutes = require('./modules/health/health.routes');
 const paymentRoutes = require('./modules/payment/payment.routes');
 const refundRoutes = require('./modules/refund/refund.routes');
+const swaggerRoutes = require('./docs/swagger/swagger.routes');
 
 function createApp() {
   const app = express();
 
   app.use(requestIdMiddleware);
+
+  // Swagger UI must run before Helmet: default CSP blocks Swagger's inline scripts
+  app.use('/api-docs', swaggerRoutes);
 
   // Security headers
   app.use(helmet());
