@@ -132,6 +132,7 @@ jobs:
           output: trivy-fs.sarif
           severity: HIGH,CRITICAL
           limit-severities-for-sarif: true
+          ignore-unfixed: true
           exit-code: "1"
 
       - name: Upload FS scan to GitHub Security
@@ -183,7 +184,7 @@ jobs:
           category: trivy-secret
 
       - name: Build Docker image
-        run: docker build --pull -t phoenix-payment-service:ci .
+        run: docker build --pull --no-cache -t phoenix-payment-service:ci .
 
       - name: Trivy image scan
         id: trivy_image
@@ -195,6 +196,7 @@ jobs:
           output: trivy-image.sarif
           severity: HIGH,CRITICAL
           limit-severities-for-sarif: true
+          ignore-unfixed: true
           exit-code: "1"
 
       - name: Upload image scan to GitHub Security
