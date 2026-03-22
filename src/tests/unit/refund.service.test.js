@@ -10,7 +10,7 @@ jest.mock('../../modules/refund/refund.model', () => {
     COMPLETED: 'COMPLETED',
   };
   return {
-    Refund: { create: jest.fn(), findOne: jest.fn() },
+    Refund: { create: jest.fn(), findOne: jest.fn(), find: jest.fn() },
     REFUND_STATUS,
   };
 });
@@ -80,9 +80,96 @@ describe('refund.service', () => {
         }),
       ).rejects.toMatchObject({ code: 'REFUND_ONLY_SUCCESS' });
     });
+
+    it('rejects when payment not found', async () => {
+      Payment.findOne.mockResolvedValue(null);
+
+      await expect(
+        refundService.requestRefund(user, {
+          paymentId: 'p1',
+          refundAmount: 10,
+          refundReason: 'x',
+        }),
+      ).rejects.toMatchObject({ statusCode: 404 });
+    });
+
+    it('rejects when refund amount exceeds payment', async () => {
+      Payment.findOne.mockResolvedValue({
+        paymentId: 'p1',
+        userId: 'user-1',
+        status: PAYMENT_STATUS.SUCCESS,
+        amount: 100,
+      });
+
+      await expect(
+        refundService.requestRefund(user, {
+          paymentId: 'p1',
+          refundAmount: 150,
+          refundReason: 'x',
+        }),
+      ).rejects.toMatchObject({ code: 'REFUND_AMOUNT_EXCEEDS_PAYMENT' });
+    });
+
+    it('rejects when user does not own payment', async () => {
+      Payment.findOne.mockResolvedValue({
+        paymentId: 'p1',
+        userId: 'other-user',
+        status: PAYMENT_STATUS.SUCCESS,
+        amount: 100,
+      });
+
+      await expect(
+        refundService.requestRefund(user, {
+          paymentId: 'p1',
+          refundAmount: 10,
+          refundReason: 'x',
+        }),
+      ).rejects.toMatchObject({ statusCode: 403 });
+    });
   });
 
   describe('processRefund', () => {
+    it('rejects when refund not found', async () => {
+      Refund.findOne.mockResolvedValue(null);
+
+      await expect(
+        refundService.processRefund(
+          { id: 'admin', role: 'ADMIN' },
+          'r1',
+          REFUND_STATUS.COMPLETED,
+        ),
+      ).rejects.toMatchObject({ statusCode: 404 });
+    });
+
+    it('rejects when non-admin processes', async () => {
+      Refund.findOne.mockResolvedValue({
+        refundId: 'r1',
+        paymentId: 'p1',
+        refundStatus: REFUND_STATUS.REQUESTED,
+      });
+
+      await expect(
+        refundService.processRefund(user, 'r1', REFUND_STATUS.COMPLETED),
+      ).rejects.toMatchObject({ statusCode: 403 });
+    });
+
+    it('rejects invalid refund status', async () => {
+      Refund.findOne.mockResolvedValue({
+        refundId: 'r1',
+        paymentId: 'p1',
+        refundStatus: REFUND_STATUS.REQUESTED,
+        save: jest.fn(),
+      });
+
+      await expect(
+        refundService.processRefund(
+          { id: 'admin', role: 'ADMIN' },
+          'r1',
+          'INVALID_STATUS',
+        ),
+      ).rejects.toMatchObject({ statusCode: 400 });
+    });
+
     it('marks payment REFUNDED when COMPLETED', async () => {
       const refund = {
         refundId: 'r1',
@@ -107,6 +194,72 @@ describe('refund.service', () => {
 
       expect(payment.status).toBe(PAYMENT_STATUS.REFUNDED);
       expect(payment.save).toHaveBeenCalled();
+    });
+  });
+
+  describe('getRefundById', () => {
+    it('returns refund for owner', async () => {
+      const refund = { refundId: 'r1', userId: 'user-1' };
+      Refund.findOne.mockResolvedValue(refund);
+
+      const r = await refundService.getRefundById(user, 'r1');
+      expect(r).toEqual(refund);
+    });
+
+    it('returns refund for admin', async () => {
+      const refund = { refundId: 'r1', userId: 'other' };
+      Refund.findOne.mockResolvedValue(refund);
+
+      const r = await refundService.getRefundById(
+        { id: 'admin', role: 'ADMIN' },
+        'r1',
+      );
+      expect(r).toEqual(refund);
+    });
+
+    it('rejects when refund not found', async () => {
+      Refund.findOne.mockResolvedValue(null);
+
+      await expect(
+        refundService.getRefundById(user, 'r1'),
+      ).rejects.toMatchObject({ statusCode: 404 });
+    });
+
+    it('rejects when user does not own refund', async () => {
+      Refund.findOne.mockResolvedValue({ refundId: 'r1', userId: 'other' });
+
+      await expect(
+        refundService.getRefundById(user, 'r1'),
+      ).rejects.toMatchObject({ statusCode: 403 });
+    });
+  });
+
+  describe('getRefundsForPayment', () => {
+    it('returns refunds for user with userId filter', async () => {
+      Refund.find.mockReturnValue({
+        sort: jest.fn().mockResolvedValue([{ refundId: 'r1' }]),
+      });
+
+      const list = await refundService.getRefundsForPayment(user, 'p1');
+
+      expect(Refund.find).toHaveBeenCalledWith({
+        paymentId: 'p1',
+        userId: 'user-1',
+      });
+      expect(list).toEqual([{ refundId: 'r1' }]);
+    });
+
+    it('admin gets all refunds for payment without userId filter', async () => {
+      Refund.find.mockReturnValue({
+        sort: jest.fn().mockResolvedValue([{ refundId: 'r1' }]),
+      });
+
+      await refundService.getRefundsForPayment(
+        { id: 'admin', role: 'ADMIN' },
+        'p1',
+      );
+
+      expect(Refund.find).toHaveBeenCalledWith({ paymentId: 'p1' });
     });
   });
 });

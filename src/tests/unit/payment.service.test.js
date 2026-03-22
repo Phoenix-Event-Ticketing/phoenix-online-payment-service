@@ -75,6 +75,24 @@ describe('payment.service', () => {
       expect(p.paymentId).toBe('p1');
     });
 
+    it('returns payment for admin', async () => {
+      Payment.findOne.mockResolvedValue({ paymentId: 'p1', userId: 'other' });
+
+      const p = await paymentService.getPaymentById(
+        { id: 'admin', role: 'ADMIN' },
+        'p1',
+      );
+      expect(p.paymentId).toBe('p1');
+    });
+
+    it('rejects when payment not found', async () => {
+      Payment.findOne.mockResolvedValue(null);
+
+      await expect(
+        paymentService.getPaymentById(user, 'p1'),
+      ).rejects.toMatchObject({ statusCode: 404 });
+    });
+
     it('forbids other user', async () => {
       Payment.findOne.mockResolvedValue({ paymentId: 'p1', userId: 'other' });
       await expect(paymentService.getPaymentById(user, 'p1')).rejects.toMatchObject({
@@ -149,6 +167,39 @@ describe('payment.service', () => {
   });
 
   describe('cancelPayment', () => {
+    it('rejects when payment not found', async () => {
+      Payment.findOne.mockResolvedValue(null);
+
+      await expect(
+        paymentService.cancelPayment(user, 'p1'),
+      ).rejects.toMatchObject({ statusCode: 404 });
+    });
+
+    it('rejects when user does not own payment', async () => {
+      Payment.findOne.mockResolvedValue({
+        paymentId: 'p1',
+        userId: 'other',
+        status: PAYMENT_STATUS.PENDING,
+      });
+
+      await expect(
+        paymentService.cancelPayment(user, 'p1'),
+      ).rejects.toMatchObject({ statusCode: 403 });
+    });
+
+    it('rejects invalid cancel transition', async () => {
+      const payment = {
+        paymentId: 'p1',
+        userId: 'user-1',
+        status: PAYMENT_STATUS.SUCCESS,
+      };
+      Payment.findOne.mockResolvedValue(payment);
+
+      await expect(
+        paymentService.cancelPayment(user, 'p1'),
+      ).rejects.toMatchObject({ code: 'INVALID_CANCEL_STATUS' });
+    });
+
     it('cancels PENDING payment for owner', async () => {
       const payment = {
         paymentId: 'p1',
