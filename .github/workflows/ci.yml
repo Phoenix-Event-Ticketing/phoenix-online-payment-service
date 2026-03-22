@@ -1,10 +1,15 @@
-name: ci
+name: CI-CD
 
 on:
   push:
-    branches:
-      - '**'
+    branches: [main, dev]
   pull_request:
+    branches: [main, dev]
+  workflow_dispatch:
+
+concurrency:
+  group: payment-service-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-test:
@@ -16,14 +21,16 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Setup Node
+      - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: "24"
           cache: npm
 
-      - name: Install
+      - name: Install dependencies
         run: npm ci
 
       - name: Audit dependencies (fail on high+)
@@ -32,15 +39,14 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Test (coverage)
+      - name: Test with coverage
         run: npm run test:coverage
 
       - name: Upload coverage artifact
-        if: ${{ hashFiles('coverage/lcov.info') != '' }}
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
-          path: coverage
+          path: coverage/lcov.info
           if-no-files-found: error
 
   dependency-review:
@@ -57,109 +63,12 @@ jobs:
 
       - name: Dependency Review
         uses: actions/dependency-review-action@v4
-        continue-on-error: true  # Skip if Dependency graph is not enabled in repo settings
-
-  sonar:
-    name: SonarQube Cloud Analysis + Quality Gate
-    needs: build-test
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: read
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Download coverage artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: coverage-report
-          path: coverage
-
-      - name: SonarQube Scan
-        uses: SonarSource/sonarqube-scan-action@v7
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          args: >
-            -Dsonar.projectKey=Phoenix-Event-Ticketing_phoenix-online-payment-service
-            -Dsonar.organization=phoenix-event-ticketing
-            -Dsonar.projectName=phoenix-online-payment-service
-            -Dsonar.sources=src
-            -Dsonar.tests=src/tests
-            -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
-            -Dsonar.exclusions=**/coverage/**,**/node_modules/**,**/docs/**,**/*.test.js,**/*.spec.js
-            -Dsonar.test.inclusions=src/tests/**/*.js
-            -Dsonar.qualitygate.wait=true
-            -Dsonar.qualitygate.timeout=300
-            -Dsonar.coverage.exclusions=**/src/tests/**,**/src/docs/**
-
-  trivy-fs:
-    name: Trivy filesystem scan
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      security-events: write
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Trivy filesystem scan (SARIF)
-        uses: aquasecurity/trivy-action@0.35.0
-        with:
-          scan-type: fs
-          ignore-unfixed: true
-          format: sarif
-          output: trivy-fs.sarif
-          severity: CRITICAL,HIGH
-
-      - name: Upload Trivy filesystem SARIF
-        uses: github/codeql-action/upload-sarif@v4
-        with:
-          sarif_file: trivy-fs.sarif
-          category: trivy-fs
-
-  trivy-image:
-    name: Trivy image scan
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      security-events: write
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Build image
-        if: ${{ hashFiles('Dockerfile') != '' }}
-        run: docker build -t phoenix-payment-service:ci .
-
-      - name: Trivy image scan (SARIF)
-        if: ${{ hashFiles('Dockerfile') != '' }}
-        uses: aquasecurity/trivy-action@0.35.0
-        with:
-          image-ref: phoenix-payment-service:ci
-          format: sarif
-          output: trivy-image.sarif
-          ignore-unfixed: true
-          severity: CRITICAL,HIGH
-
-      - name: Upload Trivy image SARIF
-        if: ${{ hashFiles('Dockerfile') != '' }}
-        uses: github/codeql-action/upload-sarif@v4
-        with:
-          sarif_file: trivy-image.sarif
-          category: trivy-image
+        continue-on-error: true
 
   osv-scanner:
     name: OSV dependency vulnerability scan
-    needs: build-test
     runs-on: ubuntu-latest
+    needs: build-test
     permissions:
       contents: read
       security-events: write
@@ -198,3 +107,311 @@ jobs:
         run: |
           echo "OSV Scanner reported vulnerabilities or failed. Check the step log and GitHub Security tab."
           exit 1
+
+  security:
+    name: Trivy Security Scans
+    runs-on: ubuntu-latest
+    needs: build-test
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Trivy FS vulnerability scan
+        id: trivy_fs
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@0.35.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln
+          format: sarif
+          output: trivy-fs.sarif
+          severity: HIGH,CRITICAL
+          limit-severities-for-sarif: true
+          exit-code: "1"
+
+      - name: Upload FS scan to GitHub Security
+        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-fs.sarif
+          category: trivy-fs
+
+      - name: Trivy misconfiguration scan
+        id: trivy_config
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@0.35.0
+        with:
+          scan-type: config
+          scan-ref: .
+          format: sarif
+          output: trivy-config.sarif
+          severity: HIGH,CRITICAL
+          limit-severities-for-sarif: true
+          exit-code: "1"
+
+      - name: Upload config scan to GitHub Security
+        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-config.sarif
+          category: trivy-config
+
+      - name: Trivy secret scan
+        id: trivy_secret
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@0.35.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: secret
+          format: sarif
+          output: trivy-secret.sarif
+          severity: HIGH,CRITICAL
+          limit-severities-for-sarif: true
+          exit-code: "1"
+
+      - name: Upload secret scan to GitHub Security
+        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-secret.sarif
+          category: trivy-secret
+
+      - name: Build Docker image
+        run: docker build --pull -t phoenix-payment-service:ci .
+
+      - name: Trivy image scan
+        id: trivy_image
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@0.35.0
+        with:
+          image-ref: phoenix-payment-service:ci
+          format: sarif
+          output: trivy-image.sarif
+          severity: HIGH,CRITICAL
+          limit-severities-for-sarif: true
+          exit-code: "1"
+
+      - name: Upload image scan to GitHub Security
+        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-image.sarif
+          category: trivy-image
+
+      - name: Upload Trivy SARIF as workflow artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-sarif-reports
+          path: |
+            trivy-fs.sarif
+            trivy-config.sarif
+            trivy-secret.sarif
+            trivy-image.sarif
+          if-no-files-found: warn
+
+      - name: Fail if Trivy found HIGH or CRITICAL issues
+        if: |
+          steps.trivy_fs.outcome == 'failure' ||
+          steps.trivy_config.outcome == 'failure' ||
+          steps.trivy_secret.outcome == 'failure' ||
+          steps.trivy_image.outcome == 'failure'
+        run: |
+          echo "Trivy step outcomes (failure = findings or scan error):"
+          echo "  trivy_fs:     ${{ steps.trivy_fs.outcome }}"
+          echo "  trivy_config: ${{ steps.trivy_config.outcome }}"
+          echo "  trivy_secret: ${{ steps.trivy_secret.outcome }}"
+          echo "  trivy_image:  ${{ steps.trivy_image.outcome }}"
+          exit 1
+
+  sonar:
+    name: SonarQube Cloud Analysis (+ QG on main)
+    runs-on: ubuntu-latest
+    needs: [osv-scanner, security]
+    permissions:
+      contents: read
+      pull-requests: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set quality gate wait (main push only)
+        id: sonar_qg
+        run: |
+          if [ "${GITHUB_REF}" = "refs/heads/main" ] && [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+            echo "wait=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "wait=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download coverage artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage
+
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@v7
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          args: >
+            -Dsonar.projectKey=Phoenix-Event-Ticketing_phoenix-online-payment-service
+            -Dsonar.organization=phoenix-event-ticketing
+            -Dsonar.projectName=phoenix-online-payment-service
+            -Dsonar.sources=src
+            -Dsonar.tests=src/tests
+            -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
+            -Dsonar.exclusions=**/coverage/**,**/node_modules/**,**/docs/**,**/*.test.js,**/*.spec.js
+            -Dsonar.test.inclusions=src/tests/**/*.js
+            -Dsonar.qualitygate.wait=${{ steps.sonar_qg.outputs.wait }}
+            -Dsonar.qualitygate.timeout=300
+            -Dsonar.coverage.exclusions=**/src/tests/**,**/src/docs/**
+
+  push-image:
+    name: Push Docker image to Artifact Registry
+    runs-on: ubuntu-latest
+    needs: sonar
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')
+    permissions:
+      contents: read
+    env:
+      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      GCP_REGION: ${{ vars.GCP_REGION }}
+      GCP_ARTIFACT_REGISTRY: ${{ vars.GCP_ARTIFACT_REGISTRY }}
+      GCP_IMAGE_NAME: ${{ vars.GCP_IMAGE_NAME }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: |
+          set -euo pipefail
+          GCP_REGION="$(printf '%s' "$GCP_REGION" | tr -d '\r\n')"
+          gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev" --quiet
+
+      - name: Build and push image
+        run: |
+          set -euo pipefail
+          GCP_REGION="$(printf '%s' "$GCP_REGION" | tr -d '\r\n')"
+          GCP_PROJECT_ID="$(printf '%s' "$GCP_PROJECT_ID" | tr -d '\r\n')"
+          GCP_ARTIFACT_REGISTRY="$(printf '%s' "$GCP_ARTIFACT_REGISTRY" | tr -d '\r\n')"
+          GCP_IMAGE_NAME="$(printf '%s' "$GCP_IMAGE_NAME" | tr -d '\r\n')"
+
+          IMAGE="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GCP_ARTIFACT_REGISTRY}/${GCP_IMAGE_NAME}"
+
+          docker build --pull -t "${IMAGE}:${GITHUB_SHA}" .
+          docker push "${IMAGE}:${GITHUB_SHA}"
+
+          if [ "${GITHUB_REF_NAME}" = "dev" ]; then
+            docker tag "${IMAGE}:${GITHUB_SHA}" "${IMAGE}:dev-latest"
+            docker push "${IMAGE}:dev-latest"
+          fi
+
+          if [ "${GITHUB_REF_NAME}" = "main" ]; then
+            docker tag "${IMAGE}:${GITHUB_SHA}" "${IMAGE}:main-latest"
+            docker push "${IMAGE}:main-latest"
+          fi
+
+  gitops-update:
+    name: Update GitOps config (payment-service image)
+    runs-on: ubuntu-latest
+    needs: push-image
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')
+    permissions:
+      contents: read
+    env:
+      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      GCP_REGION: ${{ vars.GCP_REGION }}
+      GCP_ARTIFACT_REGISTRY: ${{ vars.GCP_ARTIFACT_REGISTRY }}
+      GCP_IMAGE_NAME: ${{ vars.GCP_IMAGE_NAME }}
+      GITOPS_KUSTOMIZE_IMAGE_NAME: ${{ vars.GITOPS_KUSTOMIZE_IMAGE_NAME }}
+      GITOPS_APP_PATH: ${{ vars.GITOPS_APP_PATH }}
+
+    steps:
+      - name: Install kustomize and yq
+        env:
+          KUSTOMIZE_VERSION: "5.5.0"
+          YQ_VERSION: "v4.44.3"
+        run: |
+          set -euo pipefail
+          curl -fsSL "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv${KUSTOMIZE_VERSION}/kustomize_v${KUSTOMIZE_VERSION}_linux_amd64.tar.gz" \
+            | tar -xzC /tmp
+          sudo mv /tmp/kustomize /usr/local/bin/kustomize
+          curl -fsSL -o /tmp/yq "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64"
+          sudo mv /tmp/yq /usr/local/bin/yq
+          sudo chmod +x /usr/local/bin/yq
+          kustomize version
+          yq --version
+
+      - name: Checkout platform config
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.GITOPS_REPO }}
+          token: ${{ secrets.GITOPS_REPO_PAT }}
+          ref: main
+          path: gitops-repo
+
+      - name: Bump payment-service image in Kustomize overlay
+        run: |
+          set -euo pipefail
+          GCP_REGION="$(printf '%s' "$GCP_REGION" | tr -d '\r\n')"
+          GCP_PROJECT_ID="$(printf '%s' "$GCP_PROJECT_ID" | tr -d '\r\n')"
+          GCP_ARTIFACT_REGISTRY="$(printf '%s' "$GCP_ARTIFACT_REGISTRY" | tr -d '\r\n')"
+          GCP_IMAGE_NAME="$(printf '%s' "$GCP_IMAGE_NAME" | tr -d '\r\n')"
+          GITOPS_KUSTOMIZE_IMAGE_NAME="$(printf '%s' "${GITOPS_KUSTOMIZE_IMAGE_NAME:-}" | tr -d '\r\n')"
+          GITOPS_APP_PATH="$(printf '%s' "${GITOPS_APP_PATH:-apps/payment-service}" | tr -d '\r\n')"
+
+          IMAGE="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GCP_ARTIFACT_REGISTRY}/${GCP_IMAGE_NAME}"
+          KUSTOMIZE_IMAGE_NAME="${GITOPS_KUSTOMIZE_IMAGE_NAME:-${IMAGE}}"
+
+          case "${GITHUB_REF_NAME}" in
+            dev) OVERLAY_ENV=dev ;;
+            main) OVERLAY_ENV=prod ;;
+            *) echo "Unexpected ref: ${GITHUB_REF_NAME}"; exit 1 ;;
+          esac
+
+          OVERLAY_DIR="gitops-repo/${GITOPS_APP_PATH}/overlays/${OVERLAY_ENV}"
+          cd "${OVERLAY_DIR}"
+
+          export TAG="${GITHUB_SHA}"
+          export IMG_NAME="${KUSTOMIZE_IMAGE_NAME}"
+
+          yq e -i '(.images[] | select(.name == strenv(IMG_NAME))).newTag = strenv(TAG)' kustomization.yaml
+          sed -i '/^    newName:/d' kustomization.yaml
+          kustomize build . >/dev/null
+
+      - name: Commit and push
+        run: |
+          set -euo pipefail
+          GITOPS_APP_PATH="$(printf '%s' "${GITOPS_APP_PATH:-apps/payment-service}" | tr -d '\r\n')"
+
+          cd gitops-repo
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -u "${GITOPS_APP_PATH}/overlays/"
+          if git diff --cached --quiet; then
+            echo "No kustomization changes to commit."
+            exit 0
+          fi
+          git commit -m "chore(payment-service): bump image tag to ${GITHUB_SHA:0:7}"
+          git push origin HEAD:main
