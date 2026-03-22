@@ -1,12 +1,14 @@
 # syntax=docker/dockerfile:1.14
 
-FROM node:22-alpine AS deps
+FROM node:24-alpine AS base
 WORKDIR /app
+RUN apk upgrade --no-cache
+
+FROM base AS deps
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
-FROM node:22-alpine AS runner
-WORKDIR /app
+FROM base AS runner
 ENV NODE_ENV=production
 
 RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001 -G nodejs
