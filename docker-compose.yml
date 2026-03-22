@@ -8,7 +8,9 @@ services:
       - mongo_data:/data/db
 
   payment-service:
-    build: .
+    build:
+      context: .
+      pull: true
     ports:
       - '4002:4002'
     environment:
