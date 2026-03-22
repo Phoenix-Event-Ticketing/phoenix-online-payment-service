@@ -44,4 +44,23 @@ describe('app', () => {
     expect(res.status).toBe(200);
     expect(res.body.data.status).toBe('ok');
   });
+
+  it('serves Swagger UI at /api-docs', async () => {
+    const app = createApp();
+
+    const res = await request(app).get('/api-docs/');
+
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('swagger-ui');
+  });
+
+  it('serves OpenAPI JSON at /api-docs/swagger.json', async () => {
+    const app = createApp();
+
+    const res = await request(app).get('/api-docs/swagger.json');
+
+    expect(res.status).toBe(200);
+    expect(res.body.info.title).toBe('Phoenix Payment Service API');
+    expect(res.body.openapi).toBe('3.0.0');
+  });
 });
