@@ -10,6 +10,18 @@ const {
   markBookingAsPaid,
 } = require('../../integrations/bookingService.client');
 
+// Helper function to create audit log entries
+async function createAuditLog(eventType, paymentId, actorId, oldStatus = null, newStatus = null, metadata = {}) {
+  await PaymentAuditLog.create({
+    eventType,
+    paymentId,
+    actorId,
+    oldStatus,
+    newStatus,
+    metadata,
+  });
+}
+
 async function createPayment(user, payload, authToken) {
   const { bookingId, amount, currency, paymentMethod, metadata } = payload;
 
@@ -30,18 +42,19 @@ async function createPayment(user, payload, authToken) {
     metadata,
   });
 
-  await PaymentAuditLog.create({
-    eventType: 'PAYMENT_CREATED',
-    paymentId: payment.paymentId,
-    actorId: user.id,
-    newStatus: PAYMENT_STATUS.PENDING,
-    metadata: {
+  await createAuditLog(
+    'PAYMENT_CREATED',
+    payment.paymentId,
+    user.id,
+    null,
+    PAYMENT_STATUS.PENDING,
+    {
       bookingId,
       amount,
       currency,
       paymentMethod,
-    },
-  });
+    }
+  );
 
   return payment;
 }
@@ -67,6 +80,25 @@ async function getPayments(user, { all } = {}) {
   return Payment.find({ userId: user.id }).sort({ createdAt: -1 });
 }
 
+// Helper function to handle booking marking when payment succeeds
+async function handleSuccessfulPayment(payment, actor, oldStatus, newStatus, authToken) {
+  try {
+    await markBookingAsPaid(payment.bookingId, payment.paymentId, authToken);
+  } catch (err) {
+    await createAuditLog(
+      'BOOKING_MARK_PAID_FAILED',
+      payment.paymentId,
+      actor.id,
+      oldStatus,
+      newStatus,
+      {
+        bookingId: payment.bookingId,
+        error: err.message,
+      }
+    );
+  }
+}
+
 async function updatePaymentStatus(actor, paymentId, newStatus, authToken) {
   const payment = await Payment.findOne({ paymentId });
   if (!payment) {
@@ -85,30 +117,16 @@ async function updatePaymentStatus(actor, paymentId, newStatus, authToken) {
   payment.status = newStatus;
   await payment.save();
 
-  await PaymentAuditLog.create({
-    eventType: 'PAYMENT_STATUS_UPDATED',
-    paymentId: payment.paymentId,
-    actorId: actor.id,
+  await createAuditLog(
+    'PAYMENT_STATUS_UPDATED',
+    payment.paymentId,
+    actor.id,
     oldStatus,
-    newStatus,
-  });
+    newStatus
+  );
 
   if (newStatus === PAYMENT_STATUS.SUCCESS) {
-    try {
-      await markBookingAsPaid(payment.bookingId, payment.paymentId, authToken);
-    } catch (err) {
-      await PaymentAuditLog.create({
-        eventType: 'BOOKING_MARK_PAID_FAILED',
-        paymentId: payment.paymentId,
-        actorId: actor.id,
-        oldStatus,
-        newStatus,
-        metadata: {
-          bookingId: payment.bookingId,
-          error: err.message,
-        },
-      });
-    }
+    await handleSuccessfulPayment(payment, actor, oldStatus, newStatus, authToken);
   }
 
   return payment;
@@ -136,13 +154,13 @@ async function cancelPayment(actor, paymentId) {
   payment.status = PAYMENT_STATUS.CANCELLED;
   await payment.save();
 
-  await PaymentAuditLog.create({
-    eventType: 'PAYMENT_CANCELLED',
-    paymentId: payment.paymentId,
-    actorId: actor.id,
+  await createAuditLog(
+    'PAYMENT_CANCELLED',
+    payment.paymentId,
+    actor.id,
     oldStatus,
-    newStatus: PAYMENT_STATUS.CANCELLED,
-  });
+    PAYMENT_STATUS.CANCELLED
+  );
 
   return payment;
 }

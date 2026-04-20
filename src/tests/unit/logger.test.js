@@ -3,9 +3,6 @@ jest.mock('../../config/env', () => ({
   logLevel: 'info',
 }));
 
-const originalStderr = process.stderr.write;
-const originalStdout = process.stdout.write;
-
 describe('logger', () => {
   let stderrSpy;
   let stdoutSpy;
