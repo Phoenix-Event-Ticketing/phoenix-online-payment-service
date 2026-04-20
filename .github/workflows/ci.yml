@@ -325,7 +325,7 @@ jobs:
       GCP_ARTIFACT_REGISTRY: ${{ vars.GCP_ARTIFACT_REGISTRY }}
       GCP_IMAGE_NAME: ${{ vars.GCP_IMAGE_NAME }}
       GITOPS_KUSTOMIZE_IMAGE_NAME: ${{ vars.GITOPS_KUSTOMIZE_IMAGE_NAME }}
-      GITOPS_APP_PATH: ${{ vars.GITOPS_APP_PATH }}
+      GITOPS_APP_PATH: apps/payment-service
 
     steps:
       - name: Install kustomize and yq
