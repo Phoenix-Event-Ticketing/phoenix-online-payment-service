@@ -17,6 +17,6 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY --chown=root:root --chmod=u=rwX,go=rX package.json package-lock.json ./
 COPY --chown=root:root --chmod=u=rwX,go=rX src ./src
 
-USER nodejs
+USER 1001:1001
 EXPOSE 4002
 CMD ["node", "src/server.mjs"]
