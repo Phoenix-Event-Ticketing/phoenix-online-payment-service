@@ -2,10 +2,10 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 
-const env = require('./config/env');
-const { createLogger } = require('./config/logger');
-const { connectDb, disconnectDb } = require('./config/db');
-const createApp = require('./app');
+const env = require('./config/env.js');
+const { createLogger } = require('./config/logger.js');
+const { connectDb, disconnectDb } = require('./config/db.js');
+const createApp = require('./app.js');
 
 const logger = createLogger(env.logLevel);
 
