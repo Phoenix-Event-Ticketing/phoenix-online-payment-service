@@ -345,8 +345,8 @@ jobs:
       - name: Checkout platform config
         uses: actions/checkout@v4
         with:
-          repository: ${{ vars.GITOPS_REPO }}
-          token: ${{ secrets.GITOPS_REPO_PAT }}
+          repository: ${{ vars.GITOPS_REPO_PAT }}
+          token: ${{ secrets.GITOPS_REPO }}
           ref: main
           path: gitops-repo
 
