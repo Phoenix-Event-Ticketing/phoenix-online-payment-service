@@ -324,7 +324,7 @@ jobs:
       GCP_ARTIFACT_REGISTRY: ${{ vars.GCP_ARTIFACT_REGISTRY }}
       GCP_IMAGE_NAME: ${{ vars.GCP_IMAGE_NAME }}
       GITOPS_KUSTOMIZE_IMAGE_NAME: ${{ vars.GITOPS_KUSTOMIZE_IMAGE_NAME }}
-      GITOPS_APP_PATH: ${{ vars.GITOPS_APP_PATH || 'apps/payment-service' }}
+
 
     steps:
       - name: Install kustomize and yq
@@ -362,14 +362,12 @@ jobs:
 
           IMAGE="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GCP_ARTIFACT_REGISTRY}/${GCP_IMAGE_NAME}"
           KUSTOMIZE_IMAGE_NAME="${GITOPS_KUSTOMIZE_IMAGE_NAME:-${IMAGE}}"
-
           case "${GITHUB_REF_NAME}" in
             dev) OVERLAY_ENV=dev ;;
             main) OVERLAY_ENV=prod ;;
             *) echo "Unexpected ref: ${GITHUB_REF_NAME}"; exit 1 ;;
           esac
-
-          OVERLAY_DIR="gitops-repo/${GITOPS_APP_PATH}/overlays/${OVERLAY_ENV}"
+          OVERLAY_DIR="gitops-repo/apps/payment-service/overlays/${OVERLAY_ENV}"
           cd "${OVERLAY_DIR}"
 
           export TAG="${GITHUB_SHA}"
@@ -382,12 +380,10 @@ jobs:
       - name: Commit and push
         run: |
           set -euo pipefail
-          GITOPS_APP_PATH="$(printf '%s' "${GITOPS_APP_PATH:-apps/payment-service}" | tr -d '\r\n')"
-
           cd gitops-repo
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -u "${GITOPS_APP_PATH}/overlays/"
+          git add -u apps/payment-service/overlays/
           if git diff --cached --quiet; then
             echo "No kustomization changes to commit."
             exit 0
