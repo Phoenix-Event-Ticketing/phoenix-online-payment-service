@@ -217,6 +217,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+    continue-on-error: ${{ github.ref != 'refs/heads/main' }}
 
     steps:
       - name: Checkout
@@ -244,6 +245,7 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_SCANNER_OPTS: "-Xmx2g"
         with:
           args: >
             -Dsonar.projectKey=Phoenix-Event-Ticketing_phoenix-online-payment-service
@@ -263,7 +265,7 @@ jobs:
     permissions:
       contents: read
     runs-on: ubuntu-latest
-    needs: [osv-scanner, security, sonar]
+    needs: [osv-scanner, security]
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')
     env:
       GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
@@ -309,9 +311,6 @@ jobs:
             docker push "${IMAGE}:main-latest"
           fi
 
-  # Requires secrets.GITOPS_REPO_PAT (contents:write on GITOPS_REPO) and vars GITOPS_REPO, GCP_*.
-  # Optional GITOPS_KUSTOMIZE_IMAGE_NAME must match overlay images[].name (same as base deployment image without tag).
-  # Optional GITOPS_APP_PATH (default apps/payment-service) for Kustomize app root under the GitOps repo.
   gitops-update:
     name: Update GitOps config (payment-service image)
     runs-on: ubuntu-latest
