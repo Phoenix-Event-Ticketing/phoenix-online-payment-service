@@ -25,7 +25,7 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "axios": "^1.7.0",
+    "axios": "^1.14.1",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.0",
@@ -49,6 +49,32 @@
     "supertest": "^7.2.2"
   },
   "overrides": {
-    "flatted": "3.4.2"
+    "flatted": "3.4.2",
+    "follow-redirects": "1.15.12",
+    "path-to-regexp": "0.1.13",
+    "anymatch": {
+      "picomatch": "2.3.2"
+    },
+    "readdirp": {
+      "picomatch": "2.3.2"
+    },
+    "jest-haste-map": {
+      "picomatch": "4.0.4"
+    },
+    "jest-message-util": {
+      "picomatch": "4.0.4"
+    },
+    "jest-util": {
+      "picomatch": "4.0.4"
+    },
+    "minimatch@^3.0.0": {
+      "brace-expansion": "1.1.13"
+    },
+    "minimatch@^9.0.0": {
+      "brace-expansion": "2.0.3"
+    },
+    "minimatch@^10.0.0": {
+      "brace-expansion": "5.0.5"
+    }
   }
 }
