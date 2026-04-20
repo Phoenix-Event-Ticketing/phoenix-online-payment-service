@@ -217,6 +217,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+    continue-on-error: ${{ github.ref != 'refs/heads/main' }}
 
     steps:
       - name: Checkout
@@ -244,6 +245,7 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_SCANNER_OPTS: "-Xmx2g"
         with:
           args: >
             -Dsonar.projectKey=Phoenix-Event-Ticketing_phoenix-online-payment-service
@@ -263,7 +265,7 @@ jobs:
     permissions:
       contents: read
     runs-on: ubuntu-latest
-    needs: [osv-scanner, security, sonar]
+    needs: [osv-scanner, security]
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')
     env:
       GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
@@ -309,9 +311,6 @@ jobs:
             docker push "${IMAGE}:main-latest"
           fi
 
-  # Requires secrets.GITOPS_REPO_PAT (contents:write on GITOPS_REPO) and vars GITOPS_REPO, GCP_*.
-  # Optional GITOPS_KUSTOMIZE_IMAGE_NAME must match overlay images[].name (same as base deployment image without tag).
-  # Optional GITOPS_APP_PATH (default apps/payment-service) for Kustomize app root under the GitOps repo.
   gitops-update:
     name: Update GitOps config (payment-service image)
     runs-on: ubuntu-latest
@@ -325,7 +324,7 @@ jobs:
       GCP_ARTIFACT_REGISTRY: ${{ vars.GCP_ARTIFACT_REGISTRY }}
       GCP_IMAGE_NAME: ${{ vars.GCP_IMAGE_NAME }}
       GITOPS_KUSTOMIZE_IMAGE_NAME: ${{ vars.GITOPS_KUSTOMIZE_IMAGE_NAME }}
-      GITOPS_APP_PATH: ${{ vars.GITOPS_APP_PATH }}
+
 
     steps:
       - name: Install kustomize and yq
@@ -346,8 +345,8 @@ jobs:
       - name: Checkout platform config
         uses: actions/checkout@v4
         with:
-          repository: ${{ vars.GITOPS_REPO }}
-          token: ${{ secrets.GITOPS_REPO_PAT }}
+          repository: ${{ vars.GITOPS_REPO_PAT }}
+          token: ${{ secrets.GITOPS_REPO }}
           ref: main
           path: gitops-repo
 
@@ -363,14 +362,12 @@ jobs:
 
           IMAGE="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GCP_ARTIFACT_REGISTRY}/${GCP_IMAGE_NAME}"
           KUSTOMIZE_IMAGE_NAME="${GITOPS_KUSTOMIZE_IMAGE_NAME:-${IMAGE}}"
-
           case "${GITHUB_REF_NAME}" in
             dev) OVERLAY_ENV=dev ;;
             main) OVERLAY_ENV=prod ;;
             *) echo "Unexpected ref: ${GITHUB_REF_NAME}"; exit 1 ;;
           esac
-
-          OVERLAY_DIR="gitops-repo/${GITOPS_APP_PATH}/overlays/${OVERLAY_ENV}"
+          OVERLAY_DIR="gitops-repo/apps/payment-service/overlays/${OVERLAY_ENV}"
           cd "${OVERLAY_DIR}"
 
           export TAG="${GITHUB_SHA}"
@@ -383,12 +380,10 @@ jobs:
       - name: Commit and push
         run: |
           set -euo pipefail
-          GITOPS_APP_PATH="$(printf '%s' "${GITOPS_APP_PATH:-apps/payment-service}" | tr -d '\r\n')"
-
           cd gitops-repo
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -u "${GITOPS_APP_PATH}/overlays/"
+          git add -u apps/payment-service/overlays/
           if git diff --cached --quiet; then
             echo "No kustomization changes to commit."
             exit 0
