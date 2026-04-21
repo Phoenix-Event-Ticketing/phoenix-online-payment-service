@@ -45,6 +45,14 @@ describe('app', () => {
     expect(res.body.data.status).toBe('ok');
   });
 
+  it('supports payment routes under canonical prefix only', async () => {
+    const app = createApp();
+
+    const canonical = await request(app).get('/payments');
+
+    expect(canonical.status).toBe(401);
+  });
+
   it('serves Swagger UI at /api-docs', async () => {
     const app = createApp();
 
