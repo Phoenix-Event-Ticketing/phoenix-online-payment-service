@@ -19,22 +19,28 @@ function sanitizePathParam(value, fieldName) {
   return encodeURIComponent(value);
 }
 
-async function getBookingById(bookingId, token) {
+async function getBookingById(bookingId, token, contextHeaders = {}) {
   const safeBookingId = sanitizePathParam(bookingId, 'bookingId');
   const res = await client.get(`/api/bookings/${safeBookingId}`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...contextHeaders,
+    },
   });
   return res.data?.data || res.data;
 }
 
-async function markBookingAsPaid(bookingId, paymentId, token) {
+async function markBookingAsPaid(bookingId, paymentId, token, contextHeaders = {}) {
   const safeBookingId = sanitizePathParam(bookingId, 'bookingId');
   const safePaymentId = sanitizePathParam(paymentId, 'paymentId');
   const res = await client.patch(
     `/api/bookings/${safeBookingId}/pay`,
     { paymentId: safePaymentId },
     {
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...contextHeaders,
+      },
     },
   );
   return res.data?.data || res.data;

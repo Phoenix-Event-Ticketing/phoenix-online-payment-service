@@ -6,6 +6,7 @@ const { createHttpLogger } = require('./config/logger');
 const requestIdMiddleware = require('./middleware/requestId.middleware');
 const { globalRateLimit } = require('./middleware/rateLimit.middleware');
 const { notFoundHandler, errorHandler } = require('./middleware/error.middleware');
+const { metricsMiddleware, metricsHandler } = require('./observability/metrics');
 
 // Routes
 const healthRoutes = require('./modules/health/health.routes');
@@ -17,6 +18,7 @@ function createApp() {
   const app = express();
 
   app.use(requestIdMiddleware);
+  app.use(metricsMiddleware);
 
   // Swagger UI must run before Helmet: default CSP blocks Swagger's inline scripts
   app.use('/api-docs', swaggerRoutes);
@@ -47,6 +49,9 @@ function createApp() {
 
   // Health routes (no auth)
   app.use('/', healthRoutes);
+  if (env.metricsEnabled !== false) {
+    app.get('/metrics', metricsHandler);
+  }
 
   // Domain routes
   app.use('/', paymentRoutes);

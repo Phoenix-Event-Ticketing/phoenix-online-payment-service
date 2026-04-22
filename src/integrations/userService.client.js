@@ -9,9 +9,12 @@ const client = axios.create({
   timeout: 5000,
 });
 
-async function getUserById(userId, token) {
+async function getUserById(userId, token, contextHeaders = {}) {
   const res = await client.get(`/api/users/${userId}`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...contextHeaders,
+    },
   });
   return res.data?.data || res.data;
 }

@@ -58,7 +58,7 @@ describe('bookingService.client', () => {
       const result = await getBookingById('b1', null);
 
       expect(mockGet).toHaveBeenCalledWith('/api/bookings/b1', {
-        headers: undefined,
+        headers: {},
       });
       expect(result).toEqual({ id: 'b1' });
     });
@@ -69,7 +69,7 @@ describe('bookingService.client', () => {
       await getBookingById('b1', null);
 
       expect(mockGet).toHaveBeenCalledWith('/api/bookings/b1', {
-        headers: undefined,
+        headers: {},
       });
     });
 

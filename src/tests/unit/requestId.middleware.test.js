@@ -8,6 +8,7 @@ describe('requestId.middleware', () => {
     requestIdMiddleware(req, res, next);
     expect(req.requestId).toBeDefined();
     expect(res.setHeader).toHaveBeenCalledWith('X-Request-Id', req.requestId);
+    expect(res.setHeader).toHaveBeenCalledWith('X-Trace-Id', req.traceId);
     expect(next).toHaveBeenCalled();
   });
 
