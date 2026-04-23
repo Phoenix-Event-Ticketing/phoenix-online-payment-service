@@ -235,13 +235,13 @@ describe('bookingService.client', () => {
         1,
         '/bookings/payment-callback',
         expect.objectContaining({ paymentStatus: 'SUCCESS' }),
-        { headers: { Authorization: 'Bearer token' } },
+        { headers: { Authorization: 'Bearer token', 'X-Internal-Service-Id': 'payment-service' } },
       );
       expect(mockPost).toHaveBeenNthCalledWith(
         2,
         '/api/bookings/payment-callback',
         expect.objectContaining({ paymentStatus: 'SUCCESS' }),
-        { headers: { Authorization: 'Bearer token' } },
+        { headers: { Authorization: 'Bearer token', 'X-Internal-Service-Id': 'payment-service' } },
       );
       expect(result).toEqual({ ok: true });
     });
