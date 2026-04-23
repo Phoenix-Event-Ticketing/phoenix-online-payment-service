@@ -128,6 +128,18 @@ async function updatePaymentStatus(actor, paymentId, newStatus, authToken) {
 
   const oldStatus = payment.status;
 
+  if (oldStatus === newStatus) {
+    await createAuditLog(
+      'PAYMENT_STATUS_NOOP',
+      payment.paymentId,
+      actor.id,
+      oldStatus,
+      newStatus,
+      { reason: 'duplicate status update' }
+    );
+    return payment;
+  }
+
   if (!canTransition(oldStatus, newStatus)) {
     throw badRequest(
       `Invalid payment status transition from ${oldStatus} to ${newStatus}`,
@@ -173,6 +185,50 @@ async function updatePaymentStatus(actor, paymentId, newStatus, authToken) {
   return payment;
 }
 
+async function completePayment(actor, paymentId, newStatus, authToken) {
+  const payment = await Payment.findOne({ paymentId });
+  if (!payment) {
+    throw notFound('Payment not found');
+  }
+
+  if (actor.role !== 'ADMIN' && payment.userId !== actor.id) {
+    throw forbidden('You do not have access to complete this payment');
+  }
+
+  if (newStatus !== PAYMENT_STATUS.SUCCESS && newStatus !== PAYMENT_STATUS.FAILED) {
+    throw badRequest('Unsupported completion status', 'INVALID_COMPLETION_STATUS');
+  }
+
+  if (payment.status === newStatus) {
+    await createAuditLog(
+      'PAYMENT_COMPLETION_NOOP',
+      payment.paymentId,
+      actor.id,
+      payment.status,
+      newStatus,
+      { reason: 'duplicate completion request' }
+    );
+    return payment;
+  }
+
+  const transitionStatus =
+    payment.status === PAYMENT_STATUS.PENDING ? PAYMENT_STATUS.PROCESSING : payment.status;
+
+  if (transitionStatus !== payment.status) {
+    payment.status = transitionStatus;
+    await payment.save();
+    await createAuditLog(
+      'PAYMENT_STATUS_UPDATED',
+      payment.paymentId,
+      actor.id,
+      PAYMENT_STATUS.PENDING,
+      PAYMENT_STATUS.PROCESSING,
+    );
+  }
+
+  return updatePaymentStatus(actor, paymentId, newStatus, authToken);
+}
+
 async function cancelPayment(actor, paymentId) {
   const payment = await Payment.findOne({ paymentId });
   if (!payment) {
@@ -211,6 +267,7 @@ module.exports = {
   getPaymentById,
   getPayments,
   updatePaymentStatus,
+  completePayment,
   cancelPayment,
 };
 

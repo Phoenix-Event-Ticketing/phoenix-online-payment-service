@@ -3,6 +3,7 @@ jest.mock('../../modules/payment/payment.service', () => ({
   getPaymentById: jest.fn(),
   getPayments: jest.fn(),
   updatePaymentStatus: jest.fn(),
+  completePayment: jest.fn(),
   cancelPayment: jest.fn(),
 }));
 
@@ -19,6 +20,7 @@ const {
   handleGetPaymentById,
   handleGetPayments,
   handleUpdatePaymentStatus,
+  handleCompletePayment,
   handleCancelPayment,
 } = require('../../modules/payment/payment.controller');
 
@@ -150,6 +152,21 @@ describe('payment.controller', () => {
       await handleCancelPayment(req, res, next);
 
       expect(paymentService.cancelPayment).toHaveBeenCalledWith(req.user, 'p1');
+      expect(success).toHaveBeenCalledWith(res, payment);
+    });
+  });
+
+  describe('handleCompletePayment', () => {
+    it('completes payment with bearer token', async () => {
+      req.params = { id: 'p1' };
+      req.body = { status: 'SUCCESS' };
+      req.headers.authorization = 'Bearer tok';
+      const payment = { paymentId: 'p1', status: 'SUCCESS' };
+      paymentService.completePayment.mockResolvedValue(payment);
+
+      await handleCompletePayment(req, res, next);
+
+      expect(paymentService.completePayment).toHaveBeenCalledWith(req.user, 'p1', 'SUCCESS', 'tok');
       expect(success).toHaveBeenCalledWith(res, payment);
     });
   });

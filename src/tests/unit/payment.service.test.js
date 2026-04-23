@@ -103,6 +103,27 @@ describe('payment.service', () => {
   });
 
   describe('updatePaymentStatus', () => {
+    it('treats duplicate update as no-op', async () => {
+      const payment = {
+        paymentId: 'p1',
+        bookingId: 'b1',
+        status: PAYMENT_STATUS.SUCCESS,
+        save: jest.fn().mockResolvedValue(true),
+      };
+      Payment.findOne.mockResolvedValue(payment);
+      PaymentAuditLog.create.mockResolvedValue({});
+
+      const out = await paymentService.updatePaymentStatus(
+        { id: 'admin', role: 'ADMIN' },
+        'p1',
+        PAYMENT_STATUS.SUCCESS,
+        'tok',
+      );
+
+      expect(out.status).toBe(PAYMENT_STATUS.SUCCESS);
+      expect(markBookingAsPaid).not.toHaveBeenCalled();
+    });
+
     it('updates status and calls booking on SUCCESS', async () => {
       const payment = {
         paymentId: 'p1',
@@ -185,6 +206,53 @@ describe('payment.service', () => {
       expect(PaymentAuditLog.create).toHaveBeenCalledWith(
         expect.objectContaining({ eventType: 'BOOKING_MARK_PAID_FAILED' }),
       );
+    });
+  });
+
+  describe('completePayment', () => {
+    it('completes pending payment through processing to success', async () => {
+      const payment = {
+        paymentId: 'p1',
+        bookingId: 'b1',
+        userId: 'user-1',
+        status: PAYMENT_STATUS.PENDING,
+        save: jest.fn().mockResolvedValue(true),
+      };
+      Payment.findOne.mockResolvedValue(payment);
+      PaymentAuditLog.create.mockResolvedValue({});
+      markBookingAsPaid.mockResolvedValue({});
+
+      const out = await paymentService.completePayment(
+        { id: 'user-1', role: 'USER' },
+        'p1',
+        PAYMENT_STATUS.SUCCESS,
+        'tok',
+      );
+
+      expect(out.status).toBe(PAYMENT_STATUS.SUCCESS);
+      expect(markBookingAsPaid).toHaveBeenCalledWith('b1', 'p1', 'tok');
+    });
+
+    it('returns no-op when completion is repeated', async () => {
+      const payment = {
+        paymentId: 'p1',
+        bookingId: 'b1',
+        userId: 'user-1',
+        status: PAYMENT_STATUS.SUCCESS,
+        save: jest.fn().mockResolvedValue(true),
+      };
+      Payment.findOne.mockResolvedValue(payment);
+      PaymentAuditLog.create.mockResolvedValue({});
+
+      const out = await paymentService.completePayment(
+        { id: 'user-1', role: 'USER' },
+        'p1',
+        PAYMENT_STATUS.SUCCESS,
+        'tok',
+      );
+
+      expect(out.status).toBe(PAYMENT_STATUS.SUCCESS);
+      expect(markBookingAsPaid).not.toHaveBeenCalled();
     });
   });
 

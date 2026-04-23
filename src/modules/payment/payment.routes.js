@@ -11,6 +11,7 @@ const {
   getPaymentByIdSchema,
   getPaymentsQuerySchema,
   updatePaymentStatusSchema,
+  completePaymentSchema,
   cancelPaymentSchema,
 } = require('./payment.validation');
 const {
@@ -19,6 +20,7 @@ const {
   handleGetPaymentById,
   handleGetPayments,
   handleUpdatePaymentStatus,
+  handleCompletePayment,
   handleCancelPayment,
 } = require('./payment.controller');
 
@@ -79,6 +81,16 @@ router.patch(
   mutationRateLimit,
   validate(cancelPaymentSchema),
   handleCancelPayment,
+);
+
+// Complete payment (owner or admin, checkout simulation endpoint)
+router.post(
+  '/payments/:id/complete',
+  auth,
+  authorize([ROLES.USER, ROLES.ADMIN]),
+  mutationRateLimit,
+  validate(completePaymentSchema),
+  handleCompletePayment,
 );
 
 module.exports = router;

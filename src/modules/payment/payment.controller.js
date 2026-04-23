@@ -3,6 +3,7 @@ const {
   getPaymentById,
   getPayments,
   updatePaymentStatus,
+  completePayment,
   cancelPayment,
 } = require('./payment.service');
 const { success, created } = require('../../common/utils/response');
@@ -83,12 +84,27 @@ async function handleCancelPayment(req, res, next) {
   }
 }
 
+async function handleCompletePayment(req, res, next) {
+  try {
+    const payment = await completePayment(
+      req.user,
+      req.params.id,
+      req.body.status,
+      extractBearerToken(req.headers.authorization),
+    );
+    return success(res, payment);
+  } catch (err) {
+    return next(err);
+  }
+}
+
 module.exports = {
   handleCreatePayment,
   handleCreateInternalPayment,
   handleGetPaymentById,
   handleGetPayments,
   handleUpdatePaymentStatus,
+  handleCompletePayment,
   handleCancelPayment,
 };
 

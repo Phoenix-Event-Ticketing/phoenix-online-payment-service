@@ -54,6 +54,15 @@ const updatePaymentStatusSchema = {
   }),
 };
 
+const completePaymentSchema = {
+  params: z.object({
+    id: z.string().min(1),
+  }),
+  body: z.object({
+    status: z.enum([PAYMENT_STATUS.SUCCESS, PAYMENT_STATUS.FAILED]),
+  }),
+};
+
 const cancelPaymentSchema = {
   params: z.object({
     id: z.string().min(1),
@@ -66,6 +75,7 @@ module.exports = {
   getPaymentByIdSchema,
   getPaymentsQuerySchema,
   updatePaymentStatusSchema,
+  completePaymentSchema,
   cancelPaymentSchema,
 };
 
