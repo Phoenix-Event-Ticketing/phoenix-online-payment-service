@@ -1,6 +1,12 @@
 const axios = require('axios');
 const env = require('../config/env');
-const { AppError } = require('../common/errors');
+const {
+  badRequest,
+  unauthorized,
+  forbidden,
+  notFound,
+  AppError,
+} = require('../common/errors');
 
 const client = axios.create({
   baseURL: env.bookingServiceBaseUrl,
@@ -20,153 +26,130 @@ function sanitizePathParam(value, fieldName) {
   return encodeURIComponent(value);
 }
 
-function handleAxiosError(error) {
-  if (error.response) {
-    // The request was made and the server responded with a status code
-    // that falls out of the range of 2xx
-    throw new AppError(
-      error.response.data?.message || `Booking service error: ${error.message}`,
-      error.response.status,
-      error.response.data?.errorCode || 'BOOKING_SERVICE_ERROR',
-      error.response.data?.details,
-    );
-  } else if (error.request) {
-    // The request was made but no response was received
-    throw new AppError(
-      'Booking service request failed: No response received',
-      503,
-      'BOOKING_SERVICE_UNAVAILABLE',
-    );
-  } else {
-    // Something happened in setting up the request
-    throw new AppError(
-      `Booking service error: ${error.message}`,
-      500,
-      'BOOKING_SERVICE_ERROR',
-    );
-  }
-}
-
-function buildHeaders(token, contextHeaders = {}) {
-  return {
+async function getBookingById(bookingId, token, contextHeaders = {}) {
+  const safeBookingId = sanitizePathParam(bookingId, 'bookingId');
+  const headers = {
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...contextHeaders,
   };
-}
 
-function shouldFallbackToApiPrefix(error) {
-  const status = error?.response?.status;
-  return status === 404 || status === 405;
-}
-
-async function getBookingById(bookingId, token, contextHeaders = {}) {
   try {
-    const safeBookingId = sanitizePathParam(bookingId, 'bookingId');
-    let res;
-
-    try {
-      res = await client.get(`/bookings/${safeBookingId}`, {
-        headers: buildHeaders(token, contextHeaders),
-      });
-    } catch (err) {
-      if (!shouldFallbackToApiPrefix(err)) {
-        throw err;
-      }
-
-      // Backward-compatible fallback for environments still exposing /api-prefixed routes.
-      res = await client.get(`/api/bookings/${safeBookingId}`, {
-        headers: buildHeaders(token, contextHeaders),
-      });
-    }
-
+    const res = await client.get(`/bookings/${safeBookingId}`, { headers });
     return res.data?.data || res.data;
   } catch (err) {
-    handleAxiosError(err);
+    if (err.response?.status === 404) {
+      // Backward-compatible fallback while environments are moved off /api-prefixed routes.
+      try {
+        const res = await client.get(`/api/bookings/${safeBookingId}`, { headers });
+        return res.data?.data || res.data;
+      } catch (fallbackErr) {
+        throw mapBookingServiceError(fallbackErr, 'BOOKING_LOOKUP_FAILED');
+      }
+    }
+    throw mapBookingServiceError(err, 'BOOKING_LOOKUP_FAILED');
   }
 }
 
 async function markBookingAsPaid(bookingId, paymentReferenceId, token, contextHeaders = {}) {
+  const safeBookingId = sanitizePathParam(bookingId, 'bookingId');
+  const safePaymentReferenceId = sanitizePathParam(paymentReferenceId, 'paymentReferenceId');
+  const callbackPayload = {
+    bookingId: safeBookingId,
+    paymentReferenceId: safePaymentReferenceId,
+    paymentStatus: 'SUCCESS',
+    transactionId: safePaymentReferenceId,
+  };
+  const headers = {
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...contextHeaders,
+  };
+
   try {
-    const safeBookingId = sanitizePathParam(bookingId, 'bookingId');
-    const safePaymentReferenceId = sanitizePathParam(
-      paymentReferenceId,
-      'paymentReferenceId',
+    const res = await client.post(
+      '/bookings/payment-callback',
+      callbackPayload,
+      { headers },
     );
-    const callbackPayload = {
-      bookingId: safeBookingId,
-      paymentReferenceId: safePaymentReferenceId,
-      paymentStatus: 'SUCCESS',
-      transactionId: safePaymentReferenceId,
-    };
-    let res;
-
-    try {
-      res = await client.post('/bookings/payment-callback', callbackPayload, {
-        headers: buildHeaders(token, contextHeaders),
-      });
-    } catch (err) {
-      if (!shouldFallbackToApiPrefix(err)) {
-        throw err;
-      }
-
-      // Backward-compatible fallback for deployments exposing /api prefix.
-      res = await client.post(
-        '/api/bookings/payment-callback',
-        callbackPayload,
-        {
-          headers: buildHeaders(token, contextHeaders),
-        },
-      );
-    }
-
     return res.data?.data || res.data;
   } catch (err) {
-    handleAxiosError(err);
+    if (err.response?.status === 404) {
+      // Backward-compatible fallback for deployments exposing /api prefix.
+      try {
+        const res = await client.post(
+          '/api/bookings/payment-callback',
+          callbackPayload,
+          { headers },
+        );
+        return res.data?.data || res.data;
+      } catch (fallbackErr) {
+        throw mapBookingServiceError(fallbackErr, 'BOOKING_PAYMENT_CALLBACK_FAILED');
+      }
+    }
+    throw mapBookingServiceError(err, 'BOOKING_PAYMENT_CALLBACK_FAILED');
   }
 }
 
-async function markBookingPaymentFailed(
-  bookingId,
-  paymentReferenceId,
-  token,
-  contextHeaders = {},
-) {
+async function markBookingPaymentFailed(bookingId, paymentReferenceId, token, contextHeaders = {}) {
+  const safeBookingId = sanitizePathParam(bookingId, 'bookingId');
+  const safePaymentReferenceId = sanitizePathParam(paymentReferenceId, 'paymentReferenceId');
+  const callbackPayload = {
+    bookingId: safeBookingId,
+    paymentReferenceId: safePaymentReferenceId,
+    paymentStatus: 'FAILED',
+    transactionId: safePaymentReferenceId,
+  };
+  const headers = {
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...contextHeaders,
+  };
   try {
-    const safeBookingId = sanitizePathParam(bookingId, 'bookingId');
-    const safePaymentReferenceId = sanitizePathParam(
-      paymentReferenceId,
-      'paymentReferenceId',
+    const res = await client.post(
+      '/bookings/payment-callback',
+      callbackPayload,
+      { headers },
     );
-    const callbackPayload = {
-      bookingId: safeBookingId,
-      paymentReferenceId: safePaymentReferenceId,
-      paymentStatus: 'FAILED',
-      transactionId: safePaymentReferenceId,
-    };
-    let res;
-
-    try {
-      res = await client.post('/bookings/payment-callback', callbackPayload, {
-        headers: buildHeaders(token, contextHeaders),
-      });
-    } catch (err) {
-      if (!shouldFallbackToApiPrefix(err)) {
-        throw err;
-      }
-
-      res = await client.post(
-        '/api/bookings/payment-callback',
-        callbackPayload,
-        {
-          headers: buildHeaders(token, contextHeaders),
-        },
-      );
-    }
-
     return res.data?.data || res.data;
   } catch (err) {
-    handleAxiosError(err);
+    if (err.response?.status === 404) {
+      try {
+        const res = await client.post(
+          '/api/bookings/payment-callback',
+          callbackPayload,
+          { headers },
+        );
+        return res.data?.data || res.data;
+      } catch (fallbackErr) {
+        throw mapBookingServiceError(fallbackErr, 'BOOKING_PAYMENT_CALLBACK_FAILED');
+      }
+    }
+    throw mapBookingServiceError(err, 'BOOKING_PAYMENT_CALLBACK_FAILED');
   }
+}
+
+function mapBookingServiceError(err, defaultCode) {
+  const upstreamStatus = err?.response?.status;
+  const upstreamMessage =
+    err?.response?.data?.message || err?.message || 'Booking service request failed';
+
+  if (upstreamStatus === 400) {
+    return badRequest(upstreamMessage, defaultCode);
+  }
+  if (upstreamStatus === 401) {
+    return unauthorized('Booking service rejected authentication', defaultCode);
+  }
+  if (upstreamStatus === 403) {
+    return forbidden('Booking service denied access', defaultCode);
+  }
+  if (upstreamStatus === 404) {
+    return notFound('Booking not found', defaultCode);
+  }
+
+  return new AppError(
+    'Booking service is unavailable',
+    502,
+    defaultCode,
+    { upstreamStatus: upstreamStatus || null },
+  );
 }
 
 module.exports = {
@@ -175,4 +158,3 @@ module.exports = {
   markBookingPaymentFailed,
   sanitizePathParam,
 };
-

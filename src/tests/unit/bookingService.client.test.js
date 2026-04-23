@@ -91,6 +91,36 @@ describe('bookingService.client', () => {
       );
       expect(mockGet).not.toHaveBeenCalled();
     });
+
+    it('maps upstream 401 to unauthorized app error', async () => {
+      mockGet.mockRejectedValueOnce({
+        response: { status: 401 },
+        message: 'Request failed with status code 401',
+      });
+
+      await expect(getBookingById('b1', 'token')).rejects.toMatchObject({
+        statusCode: 401,
+        code: 'BOOKING_LOOKUP_FAILED',
+      });
+      expect(mockGet).toHaveBeenCalledTimes(1);
+    });
+
+    it('retries with /api prefix only when first call is 404', async () => {
+      mockGet
+        .mockRejectedValueOnce({ response: { status: 404 }, message: 'Not Found' })
+        .mockResolvedValueOnce({ data: { data: { id: 'b1' } } });
+
+      const result = await getBookingById('b1', 'token');
+
+      expect(mockGet).toHaveBeenCalledTimes(2);
+      expect(mockGet).toHaveBeenNthCalledWith(1, '/bookings/b1', {
+        headers: { Authorization: 'Bearer token' },
+      });
+      expect(mockGet).toHaveBeenNthCalledWith(2, '/api/bookings/b1', {
+        headers: { Authorization: 'Bearer token' },
+      });
+      expect(result).toEqual({ id: 'b1' });
+    });
   });
 
   describe('markBookingAsPaid', () => {
@@ -161,6 +191,19 @@ describe('bookingService.client', () => {
         },
         { headers: { Authorization: 'Bearer token' } },
       );
+    });
+
+    it('maps upstream 403 callback error to forbidden app error', async () => {
+      mockPost.mockRejectedValueOnce({
+        response: { status: 403 },
+        message: 'Forbidden',
+      });
+
+      await expect(markBookingPaymentFailed('b1', 'p1', 'token')).rejects.toMatchObject({
+        statusCode: 403,
+        code: 'BOOKING_PAYMENT_CALLBACK_FAILED',
+      });
+      expect(mockPost).toHaveBeenCalledTimes(1);
     });
   });
 
