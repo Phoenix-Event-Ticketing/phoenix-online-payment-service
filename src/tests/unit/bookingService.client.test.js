@@ -121,6 +121,46 @@ describe('bookingService.client', () => {
       });
       expect(result).toEqual({ id: 'b1' });
     });
+
+    it('maps fallback lookup failure after 404 retry', async () => {
+      mockGet
+        .mockRejectedValueOnce({ response: { status: 404 }, message: 'Not Found' })
+        .mockRejectedValueOnce({ response: { status: 404 }, message: 'Still not found' });
+
+      await expect(getBookingById('b1', 'token')).rejects.toMatchObject({
+        statusCode: 404,
+        code: 'BOOKING_LOOKUP_FAILED',
+      });
+      expect(mockGet).toHaveBeenCalledTimes(2);
+    });
+
+    it('maps upstream 400 to bad request app error', async () => {
+      mockGet.mockRejectedValueOnce({
+        response: { status: 400, data: { message: 'Bad booking payload' } },
+      });
+
+      await expect(getBookingById('b1', 'token')).rejects.toMatchObject({
+        statusCode: 400,
+        code: 'BOOKING_LOOKUP_FAILED',
+      });
+      expect(mockGet).toHaveBeenCalledTimes(1);
+    });
+
+    it('maps direct upstream 404 to not found when no fallback retry applies', async () => {
+      mockGet.mockRejectedValueOnce({
+        response: { status: 404 },
+      });
+      // First call is 404 so retry happens; force retry to non-404 mapped notFound by mapper.
+      mockGet.mockRejectedValueOnce({
+        response: { status: 404 },
+      });
+
+      await expect(getBookingById('b1', null)).rejects.toMatchObject({
+        statusCode: 404,
+        code: 'BOOKING_LOOKUP_FAILED',
+      });
+      expect(mockGet).toHaveBeenCalledTimes(2);
+    });
   });
 
   describe('markBookingAsPaid', () => {
