@@ -22,11 +22,29 @@ function sanitizePathParam(value, fieldName) {
 
 function handleAxiosError(error) {
   if (error.response) {
+    const upstreamStatus = error.response.status;
+    const upstreamMessage =
+      error.response.data?.message || `Booking service error: ${error.message}`;
+
+    // Return a clear upstream dependency error so clients know this came
+    // from Booking service, not from Payment service auth middleware.
+    if (upstreamStatus === 401 || upstreamStatus === 403) {
+      throw new AppError(
+        `Booking service rejected payment pre-check: ${upstreamMessage}`,
+        502,
+        'BOOKING_SERVICE_AUTH_REJECTED',
+        {
+          upstreamService: 'booking-service',
+          upstreamStatus,
+        },
+      );
+    }
+
     // The request was made and the server responded with a status code
     // that falls out of the range of 2xx
     throw new AppError(
-      error.response.data?.message || `Booking service error: ${error.message}`,
-      error.response.status,
+      upstreamMessage,
+      upstreamStatus,
       error.response.data?.errorCode || 'BOOKING_SERVICE_ERROR',
       error.response.data?.details,
     );
