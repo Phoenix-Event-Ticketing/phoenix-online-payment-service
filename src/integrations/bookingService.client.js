@@ -21,34 +21,103 @@ function sanitizePathParam(value, fieldName) {
 
 async function getBookingById(bookingId, token, contextHeaders = {}) {
   const safeBookingId = sanitizePathParam(bookingId, 'bookingId');
-  const res = await client.get(`/api/bookings/${safeBookingId}`, {
-    headers: {
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...contextHeaders,
-    },
-  });
-  return res.data?.data || res.data;
-}
-
-async function markBookingAsPaid(bookingId, paymentId, token, contextHeaders = {}) {
-  const safeBookingId = sanitizePathParam(bookingId, 'bookingId');
-  const safePaymentId = sanitizePathParam(paymentId, 'paymentId');
-  const res = await client.patch(
-    `/api/bookings/${safeBookingId}/pay`,
-    { paymentId: safePaymentId },
-    {
+  let res;
+  try {
+    res = await client.get(`/bookings/${safeBookingId}`, {
       headers: {
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...contextHeaders,
       },
-    },
-  );
+    });
+  } catch {
+    // Backward-compatible fallback while environments are moved off /api-prefixed routes.
+    res = await client.get(`/api/bookings/${safeBookingId}`, {
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...contextHeaders,
+      },
+    });
+  }
+  return res.data?.data || res.data;
+}
+
+async function markBookingAsPaid(bookingId, paymentReferenceId, token, contextHeaders = {}) {
+  const safeBookingId = sanitizePathParam(bookingId, 'bookingId');
+  const safePaymentReferenceId = sanitizePathParam(paymentReferenceId, 'paymentReferenceId');
+  const callbackPayload = {
+    bookingId: safeBookingId,
+    paymentReferenceId: safePaymentReferenceId,
+    paymentStatus: 'SUCCESS',
+    transactionId: safePaymentReferenceId,
+  };
+  let res;
+  try {
+    res = await client.post(
+      '/bookings/payment-callback',
+      callbackPayload,
+      {
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...contextHeaders,
+        },
+      },
+    );
+  } catch {
+    // Backward-compatible fallback for deployments exposing /api prefix.
+    res = await client.post(
+      '/api/bookings/payment-callback',
+      callbackPayload,
+      {
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...contextHeaders,
+        },
+      },
+    );
+  }
+  return res.data?.data || res.data;
+}
+
+async function markBookingPaymentFailed(bookingId, paymentReferenceId, token, contextHeaders = {}) {
+  const safeBookingId = sanitizePathParam(bookingId, 'bookingId');
+  const safePaymentReferenceId = sanitizePathParam(paymentReferenceId, 'paymentReferenceId');
+  const callbackPayload = {
+    bookingId: safeBookingId,
+    paymentReferenceId: safePaymentReferenceId,
+    paymentStatus: 'FAILED',
+    transactionId: safePaymentReferenceId,
+  };
+  let res;
+  try {
+    res = await client.post(
+      '/bookings/payment-callback',
+      callbackPayload,
+      {
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...contextHeaders,
+        },
+      },
+    );
+  } catch {
+    res = await client.post(
+      '/api/bookings/payment-callback',
+      callbackPayload,
+      {
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...contextHeaders,
+        },
+      },
+    );
+  }
   return res.data?.data || res.data;
 }
 
 module.exports = {
   getBookingById,
   markBookingAsPaid,
+  markBookingPaymentFailed,
   sanitizePathParam,
 };
 

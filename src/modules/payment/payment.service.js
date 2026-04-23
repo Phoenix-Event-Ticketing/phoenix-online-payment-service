@@ -8,6 +8,7 @@ const { badRequest, notFound, forbidden } = require('../../common/errors');
 const {
   getBookingById,
   markBookingAsPaid,
+  markBookingPaymentFailed,
 } = require('../../integrations/bookingService.client');
 
 // Helper function to create audit log entries
@@ -23,7 +24,16 @@ async function createAuditLog(eventType, paymentId, actorId, oldStatus = null, n
 }
 
 async function createPayment(user, payload, authToken) {
-  const { bookingId, amount, currency, paymentMethod, metadata } = payload;
+  const {
+    bookingId,
+    amount,
+    currency,
+    paymentMethod,
+    metadata,
+    customerEmail,
+    callbackUrl,
+    description,
+  } = payload;
 
   if (amount <= 0) {
     throw badRequest('Amount must be positive');
@@ -36,10 +46,15 @@ async function createPayment(user, payload, authToken) {
     bookingId,
     userId: user.id,
     amount,
-    currency,
-    paymentMethod,
+    currency: currency || 'LKR',
+    paymentMethod: paymentMethod || 'CARD',
     status: PAYMENT_STATUS.PENDING,
-    metadata,
+    metadata: {
+      ...(metadata || {}),
+      ...(customerEmail ? { customerEmail } : {}),
+      ...(callbackUrl ? { callbackUrl } : {}),
+      ...(description ? { description } : {}),
+    },
   });
 
   await createAuditLog(
@@ -51,8 +66,8 @@ async function createPayment(user, payload, authToken) {
     {
       bookingId,
       amount,
-      currency,
-      paymentMethod,
+      currency: payment.currency,
+      paymentMethod: payment.paymentMethod,
     }
   );
 
@@ -127,6 +142,26 @@ async function updatePaymentStatus(actor, paymentId, newStatus, authToken) {
 
   if (newStatus === PAYMENT_STATUS.SUCCESS) {
     await handleSuccessfulPayment(payment, actor, oldStatus, newStatus, authToken);
+  } else if (newStatus === PAYMENT_STATUS.FAILED) {
+    try {
+      await markBookingPaymentFailed(
+        payment.bookingId,
+        payment.transactionReference || payment.paymentId,
+        authToken,
+      );
+    } catch (err) {
+      await createAuditLog(
+        'BOOKING_MARK_FAILED_FAILED',
+        payment.paymentId,
+        actor.id,
+        oldStatus,
+        newStatus,
+        {
+          bookingId: payment.bookingId,
+          error: err.message,
+        }
+      );
+    }
   }
 
   return payment;
