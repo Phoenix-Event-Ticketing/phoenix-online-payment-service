@@ -1,6 +1,7 @@
 jest.mock('../../integrations/bookingService.client', () => ({
   getBookingById: jest.fn(),
   markBookingAsPaid: jest.fn(),
+  markBookingPaymentFailed: jest.fn(),
 }));
 
 jest.mock('../../modules/payment/payment.model', () => ({
@@ -13,7 +14,7 @@ jest.mock('../../modules/payment/paymentAudit.model', () => ({
   create: jest.fn(),
 }));
 
-const { getBookingById, markBookingAsPaid } = require('../../integrations/bookingService.client');
+const { getBookingById, markBookingAsPaid, markBookingPaymentFailed } = require('../../integrations/bookingService.client');
 const Payment = require('../../modules/payment/payment.model');
 const PaymentAuditLog = require('../../modules/payment/paymentAudit.model');
 const { PAYMENT_STATUS } = require('../../common/constants/paymentStatus');
@@ -140,6 +141,27 @@ describe('payment.service', () => {
           null,
         ),
       ).rejects.toMatchObject({ statusCode: 400 });
+    });
+
+    it('calls booking callback with FAILED state', async () => {
+      const payment = {
+        paymentId: 'p1',
+        bookingId: 'b1',
+        status: PAYMENT_STATUS.PROCESSING,
+        save: jest.fn().mockResolvedValue(true),
+      };
+      Payment.findOne.mockResolvedValue(payment);
+      PaymentAuditLog.create.mockResolvedValue({});
+      markBookingPaymentFailed.mockResolvedValue({});
+
+      await paymentService.updatePaymentStatus(
+        { id: 'admin', role: 'ADMIN' },
+        'p1',
+        PAYMENT_STATUS.FAILED,
+        'tok',
+      );
+
+      expect(markBookingPaymentFailed).toHaveBeenCalledWith('b1', 'p1', 'tok');
     });
 
     it('records audit when markBookingAsPaid fails', async () => {

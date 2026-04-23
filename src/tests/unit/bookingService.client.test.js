@@ -1,13 +1,13 @@
 jest.mock('axios', () => {
   const mockGet = jest.fn();
-  const mockPatch = jest.fn();
+  const mockPost = jest.fn();
   return {
     create: jest.fn(() => ({
       get: mockGet,
-      patch: mockPatch,
+      post: mockPost,
     })),
     _mockGet: mockGet,
-    _mockPatch: mockPatch,
+    _mockPost: mockPost,
   };
 });
 
@@ -19,6 +19,7 @@ const axios = require('axios');
 const {
   getBookingById,
   markBookingAsPaid,
+  markBookingPaymentFailed,
   sanitizePathParam,
 } = require('../../integrations/bookingService.client');
 
@@ -28,14 +29,14 @@ function getClient() {
 
 describe('bookingService.client', () => {
   let mockGet;
-  let mockPatch;
+  let mockPost;
 
   beforeEach(() => {
     const client = getClient();
     mockGet = client.get;
-    mockPatch = client.patch;
+    mockPost = client.post;
     mockGet.mockReset();
-    mockPatch.mockReset();
+    mockPost.mockReset();
   });
 
   describe('getBookingById', () => {
@@ -46,7 +47,7 @@ describe('bookingService.client', () => {
 
       const result = await getBookingById('b1', 'token');
 
-      expect(mockGet).toHaveBeenCalledWith('/api/bookings/b1', {
+      expect(mockGet).toHaveBeenCalledWith('/bookings/b1', {
         headers: { Authorization: 'Bearer token' },
       });
       expect(result).toEqual({ id: 'b1', status: 'PENDING' });
@@ -57,8 +58,8 @@ describe('bookingService.client', () => {
 
       const result = await getBookingById('b1', null);
 
-      expect(mockGet).toHaveBeenCalledWith('/api/bookings/b1', {
-        headers: undefined,
+      expect(mockGet).toHaveBeenCalledWith('/bookings/b1', {
+        headers: {},
       });
       expect(result).toEqual({ id: 'b1' });
     });
@@ -68,8 +69,8 @@ describe('bookingService.client', () => {
 
       await getBookingById('b1', null);
 
-      expect(mockGet).toHaveBeenCalledWith('/api/bookings/b1', {
-        headers: undefined,
+      expect(mockGet).toHaveBeenCalledWith('/bookings/b1', {
+        headers: {},
       });
     });
 
@@ -79,7 +80,7 @@ describe('bookingService.client', () => {
       await getBookingById('abc-123_xyz', 'tok');
 
       expect(mockGet).toHaveBeenCalledWith(
-        '/api/bookings/abc-123_xyz',
+        '/bookings/abc-123_xyz',
         expect.any(Object),
       );
     });
@@ -93,23 +94,28 @@ describe('bookingService.client', () => {
   });
 
   describe('markBookingAsPaid', () => {
-    it('patches booking with paymentId and returns data', async () => {
-      mockPatch.mockResolvedValue({
+    it('posts callback with success status and returns data', async () => {
+      mockPost.mockResolvedValue({
         data: { data: { id: 'b1', paymentId: 'p1' } },
       });
 
       const result = await markBookingAsPaid('b1', 'p1', 'token');
 
-      expect(mockPatch).toHaveBeenCalledWith(
-        '/api/bookings/b1/pay',
-        { paymentId: 'p1' },
+      expect(mockPost).toHaveBeenCalledWith(
+        '/bookings/payment-callback',
+        {
+          bookingId: 'b1',
+          paymentReferenceId: 'p1',
+          paymentStatus: 'SUCCESS',
+          transactionId: 'p1',
+        },
         { headers: { Authorization: 'Bearer token' } },
       );
       expect(result).toEqual({ id: 'b1', paymentId: 'p1' });
     });
 
     it('returns res.data when res.data.data is absent', async () => {
-      mockPatch.mockResolvedValue({ data: { id: 'b1' } });
+      mockPost.mockResolvedValue({ data: { id: 'b1' } });
 
       const result = await markBookingAsPaid('b1', 'p1', null);
 
@@ -117,13 +123,18 @@ describe('bookingService.client', () => {
     });
 
     it('sanitizes both bookingId and paymentId', async () => {
-      mockPatch.mockResolvedValue({ data: {} });
+      mockPost.mockResolvedValue({ data: {} });
 
       await markBookingAsPaid('b1', 'pay-1', 'tok');
 
-      expect(mockPatch).toHaveBeenCalledWith(
-        '/api/bookings/b1/pay',
-        { paymentId: 'pay-1' },
+      expect(mockPost).toHaveBeenCalledWith(
+        '/bookings/payment-callback',
+        {
+          bookingId: 'b1',
+          paymentReferenceId: 'pay-1',
+          paymentStatus: 'SUCCESS',
+          transactionId: 'pay-1',
+        },
         expect.any(Object),
       );
     });
@@ -132,7 +143,24 @@ describe('bookingService.client', () => {
       await expect(markBookingAsPaid('../x', 'p1', 'tok')).rejects.toThrow(
         'invalid characters',
       );
-      expect(mockPatch).not.toHaveBeenCalled();
+      expect(mockPost).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('markBookingPaymentFailed', () => {
+    it('posts callback with failed status', async () => {
+      mockPost.mockResolvedValue({ data: { ok: true } });
+      await markBookingPaymentFailed('b1', 'p1', 'token');
+      expect(mockPost).toHaveBeenCalledWith(
+        '/bookings/payment-callback',
+        {
+          bookingId: 'b1',
+          paymentReferenceId: 'p1',
+          paymentStatus: 'FAILED',
+          transactionId: 'p1',
+        },
+        { headers: { Authorization: 'Bearer token' } },
+      );
     });
   });
 

@@ -47,29 +47,122 @@ function handleAxiosError(error) {
   }
 }
 
-async function getBookingById(bookingId, token) {
+function buildHeaders(token, contextHeaders = {}) {
+  return {
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...contextHeaders,
+  };
+}
+
+function shouldFallbackToApiPrefix(error) {
+  const status = error?.response?.status;
+  return status === 404 || status === 405;
+}
+
+async function getBookingById(bookingId, token, contextHeaders = {}) {
   try {
     const safeBookingId = sanitizePathParam(bookingId, 'bookingId');
-    const res = await client.get(`/api/bookings/${safeBookingId}`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    });
+    let res;
+
+    try {
+      res = await client.get(`/bookings/${safeBookingId}`, {
+        headers: buildHeaders(token, contextHeaders),
+      });
+    } catch (err) {
+      if (!shouldFallbackToApiPrefix(err)) {
+        throw err;
+      }
+
+      // Backward-compatible fallback for environments still exposing /api-prefixed routes.
+      res = await client.get(`/api/bookings/${safeBookingId}`, {
+        headers: buildHeaders(token, contextHeaders),
+      });
+    }
+
     return res.data?.data || res.data;
   } catch (err) {
     handleAxiosError(err);
   }
 }
 
-async function markBookingAsPaid(bookingId, paymentId, token) {
+async function markBookingAsPaid(bookingId, paymentReferenceId, token, contextHeaders = {}) {
   try {
     const safeBookingId = sanitizePathParam(bookingId, 'bookingId');
-    const safePaymentId = sanitizePathParam(paymentId, 'paymentId');
-    const res = await client.patch(
-      `/api/bookings/${safeBookingId}/pay`,
-      { paymentId: safePaymentId },
-      {
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-      },
+    const safePaymentReferenceId = sanitizePathParam(
+      paymentReferenceId,
+      'paymentReferenceId',
     );
+    const callbackPayload = {
+      bookingId: safeBookingId,
+      paymentReferenceId: safePaymentReferenceId,
+      paymentStatus: 'SUCCESS',
+      transactionId: safePaymentReferenceId,
+    };
+    let res;
+
+    try {
+      res = await client.post('/bookings/payment-callback', callbackPayload, {
+        headers: buildHeaders(token, contextHeaders),
+      });
+    } catch (err) {
+      if (!shouldFallbackToApiPrefix(err)) {
+        throw err;
+      }
+
+      // Backward-compatible fallback for deployments exposing /api prefix.
+      res = await client.post(
+        '/api/bookings/payment-callback',
+        callbackPayload,
+        {
+          headers: buildHeaders(token, contextHeaders),
+        },
+      );
+    }
+
+    return res.data?.data || res.data;
+  } catch (err) {
+    handleAxiosError(err);
+  }
+}
+
+async function markBookingPaymentFailed(
+  bookingId,
+  paymentReferenceId,
+  token,
+  contextHeaders = {},
+) {
+  try {
+    const safeBookingId = sanitizePathParam(bookingId, 'bookingId');
+    const safePaymentReferenceId = sanitizePathParam(
+      paymentReferenceId,
+      'paymentReferenceId',
+    );
+    const callbackPayload = {
+      bookingId: safeBookingId,
+      paymentReferenceId: safePaymentReferenceId,
+      paymentStatus: 'FAILED',
+      transactionId: safePaymentReferenceId,
+    };
+    let res;
+
+    try {
+      res = await client.post('/bookings/payment-callback', callbackPayload, {
+        headers: buildHeaders(token, contextHeaders),
+      });
+    } catch (err) {
+      if (!shouldFallbackToApiPrefix(err)) {
+        throw err;
+      }
+
+      res = await client.post(
+        '/api/bookings/payment-callback',
+        callbackPayload,
+        {
+          headers: buildHeaders(token, contextHeaders),
+        },
+      );
+    }
+
     return res.data?.data || res.data;
   } catch (err) {
     handleAxiosError(err);
@@ -79,6 +172,7 @@ async function markBookingAsPaid(bookingId, paymentId, token) {
 module.exports = {
   getBookingById,
   markBookingAsPaid,
+  markBookingPaymentFailed,
   sanitizePathParam,
 };
 

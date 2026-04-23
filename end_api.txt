@@ -5,28 +5,28 @@ Health (no auth)
 - GET /ready
 
 Payments (JWT auth required)
-- POST /api/payments
+- POST /payments
   - Body: { bookingId, amount, currency, paymentMethod, metadata? }
-- GET /api/payments
+- GET /payments
   - USER: returns own payments
   - ADMIN: returns own payments unless ?all=true is provided
   - Query: ?all=true (ADMIN only)
-- GET /api/payments/:id
+- GET /payments/:id
   - Owner or ADMIN
-- PATCH /api/payments/:id/status
+- PATCH /payments/:id/status
   - ADMIN only
   - Body: { status: PENDING|PROCESSING|SUCCESS|FAILED|CANCELLED|REFUNDED }
-- PATCH /api/payments/:id/cancel
+- PATCH /payments/:id/cancel
   - Owner or ADMIN
 
 Refunds (JWT auth required)
-- POST /api/refunds
+- POST /refunds
   - Body: { paymentId, refundAmount, refundReason }
-- GET /api/refunds/:id
+- GET /refunds/:id
   - Owner or ADMIN
-- GET /api/refunds/payment/:paymentId
+- GET /refunds/payment/:paymentId
   - Owner or ADMIN
-- PATCH /api/refunds/:id/status
+- PATCH /refunds/:id/status
   - ADMIN only
   - Body: { status: REQUESTED|APPROVED|REJECTED|COMPLETED }
 

@@ -1,6 +1,4 @@
-// Placeholder client for future use if the Payment service needs
-// to call User Service over REST. Currently, authentication is
-// handled purely by verifying JWT tokens issued by User Service.
+
 const axios = require('axios');
 const env = require('../config/env');
 const { AppError } = require('../common/errors');
@@ -37,10 +35,13 @@ function handleAxiosError(error) {
   }
 }
 
-async function getUserById(userId, token) {
+async function getUserById(userId, token, contextHeaders = {}) {
   try {
     const res = await client.get(`/api/users/${userId}`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...contextHeaders,
+      },
     });
     return res.data?.data || res.data;
   } catch (err) {
@@ -51,4 +52,3 @@ async function getUserById(userId, token) {
 module.exports = {
   getUserById,
 };
-

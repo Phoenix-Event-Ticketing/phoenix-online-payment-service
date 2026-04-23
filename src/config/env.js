@@ -21,6 +21,10 @@ const env = {
   logLevel: process.env.LOG_LEVEL || 'info',
   /** Comma-separated origins, or * for all (dev only in production prefer explicit list) */
   corsOrigin: process.env.CORS_ORIGIN || '*',
+  metricsEnabled:
+    String(process.env.METRICS_ENABLED || 'true').toLowerCase() === 'true',
+  jaegerEndpoint: process.env.JAEGER_ENDPOINT || '',
+  otelServiceName: process.env.OTEL_SERVICE_NAME || 'payment-service',
 };
 
 module.exports = env;

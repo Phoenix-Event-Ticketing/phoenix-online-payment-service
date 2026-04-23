@@ -22,7 +22,7 @@ const router = express.Router();
 
 // Create payment
 router.post(
-  '/api/payments',
+  '/payments',
   auth,
   authorize([ROLES.USER, ROLES.ADMIN]),
   mutationRateLimit,
@@ -32,7 +32,7 @@ router.post(
 
 // List payments: user sees own; admin can pass ?all=true to see all
 router.get(
-  '/api/payments',
+  '/payments',
   auth,
   authorize([ROLES.USER, ROLES.ADMIN]),
   validate(getPaymentsQuerySchema),
@@ -41,7 +41,7 @@ router.get(
 
 // Get payment by id
 router.get(
-  '/api/payments/:id',
+  '/payments/:id',
   auth,
   authorize([ROLES.USER, ROLES.ADMIN]),
   validate(getPaymentByIdSchema),
@@ -50,7 +50,7 @@ router.get(
 
 // Update payment status (admin only)
 router.patch(
-  '/api/payments/:id/status',
+  '/payments/:id/status',
   auth,
   authorize([ROLES.ADMIN]),
   mutationRateLimit,
@@ -60,7 +60,7 @@ router.patch(
 
 // Cancel payment (owner or admin)
 router.patch(
-  '/api/payments/:id/cancel',
+  '/payments/:id/cancel',
   auth,
   authorize([ROLES.USER, ROLES.ADMIN]),
   mutationRateLimit,

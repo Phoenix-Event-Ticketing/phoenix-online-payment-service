@@ -5,8 +5,13 @@ const createPaymentSchema = {
   body: z.object({
     bookingId: z.string().min(1),
     amount: z.number().positive(),
-    currency: z.string().min(1),
-    paymentMethod: z.string().min(1),
+    // New canonical fields
+    currency: z.string().min(1).optional(),
+    paymentMethod: z.string().min(1).optional(),
+    // Legacy compatibility fields from booking-service integration payload
+    customerEmail: z.string().email().optional(),
+    callbackUrl: z.string().url().optional(),
+    description: z.string().min(1).optional(),
     metadata: z.record(z.any()).optional(),
   }),
 };

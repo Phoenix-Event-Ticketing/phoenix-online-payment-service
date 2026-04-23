@@ -10,7 +10,12 @@ const { success, created } = require('../../common/utils/response');
 async function handleCreatePayment(req, res, next) {
   try {
     const payment = await createPayment(req.user, req.body, req.headers.authorization?.split(' ')[1]);
-    return created(res, payment);
+    const normalizedPayment = typeof payment?.toObject === 'function' ? payment.toObject() : payment;
+    return created(res, {
+      ...normalizedPayment,
+      id: normalizedPayment.paymentId || normalizedPayment.id,
+      paymentReferenceId: normalizedPayment.paymentId || normalizedPayment.paymentReferenceId,
+    });
   } catch (err) {
     return next(err);
   }

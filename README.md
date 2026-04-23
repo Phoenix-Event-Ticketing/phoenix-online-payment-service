@@ -56,7 +56,7 @@ curl http://localhost:4002/ready
 Create payment (requires Booking Service running at `BOOKING_SERVICE_BASE_URL`):
 
 ```bash
-curl -X POST http://localhost:4002/api/payments \
+curl -X POST http://localhost:4002/payments \
   -H "Authorization: Bearer <USER_TOKEN>" \
   -H "Content-Type: application/json" \
   -d "{\"bookingId\":\"booking-1\",\"amount\":100,\"currency\":\"LKR\",\"paymentMethod\":\"CARD\"}"
@@ -65,19 +65,19 @@ curl -X POST http://localhost:4002/api/payments \
 List my payments:
 
 ```bash
-curl http://localhost:4002/api/payments -H "Authorization: Bearer <USER_TOKEN>"
+curl http://localhost:4002/payments -H "Authorization: Bearer <USER_TOKEN>"
 ```
 
 Admin list all payments:
 
 ```bash
-curl "http://localhost:4002/api/payments?all=true" -H "Authorization: Bearer <ADMIN_TOKEN>"
+curl "http://localhost:4002/payments?all=true" -H "Authorization: Bearer <ADMIN_TOKEN>"
 ```
 
 Update payment status (ADMIN only):
 
 ```bash
-curl -X PATCH http://localhost:4002/api/payments/<paymentId>/status \
+curl -X PATCH http://localhost:4002/payments/<paymentId>/status \
   -H "Authorization: Bearer <ADMIN_TOKEN>" \
   -H "Content-Type: application/json" \
   -d "{\"status\":\"PROCESSING\"}"
@@ -86,7 +86,7 @@ curl -X PATCH http://localhost:4002/api/payments/<paymentId>/status \
 Request refund (only for `SUCCESS` payments):
 
 ```bash
-curl -X POST http://localhost:4002/api/refunds \
+curl -X POST http://localhost:4002/refunds \
   -H "Authorization: Bearer <USER_TOKEN>" \
   -H "Content-Type: application/json" \
   -d "{\"paymentId\":\"<paymentId>\",\"refundAmount\":50,\"refundReason\":\"test\"}"
