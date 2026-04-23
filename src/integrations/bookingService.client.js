@@ -55,18 +55,41 @@ async function getBookingById(bookingId, token, contextHeaders = {}) {
 }
 
 async function markBookingAsPaid(bookingId, paymentReferenceId, token, contextHeaders = {}) {
+  return postBookingPaymentCallback(
+    bookingId,
+    paymentReferenceId,
+    'SUCCESS',
+    token,
+    contextHeaders,
+  );
+}
+
+async function markBookingPaymentFailed(bookingId, paymentReferenceId, token, contextHeaders = {}) {
+  return postBookingPaymentCallback(
+    bookingId,
+    paymentReferenceId,
+    'FAILED',
+    token,
+    contextHeaders,
+  );
+}
+
+async function postBookingPaymentCallback(
+  bookingId,
+  paymentReferenceId,
+  paymentStatus,
+  token,
+  contextHeaders = {},
+) {
   const safeBookingId = sanitizePathParam(bookingId, 'bookingId');
   const safePaymentReferenceId = sanitizePathParam(paymentReferenceId, 'paymentReferenceId');
   const callbackPayload = {
     bookingId: safeBookingId,
     paymentReferenceId: safePaymentReferenceId,
-    paymentStatus: 'SUCCESS',
+    paymentStatus,
     transactionId: safePaymentReferenceId,
   };
-  const headers = {
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    ...contextHeaders,
-  };
+  const headers = buildHeaders(token, contextHeaders);
 
   try {
     const res = await client.post(
@@ -78,43 +101,6 @@ async function markBookingAsPaid(bookingId, paymentReferenceId, token, contextHe
   } catch (err) {
     if (err.response?.status === 404) {
       // Backward-compatible fallback for deployments exposing /api prefix.
-      try {
-        const res = await client.post(
-          '/api/bookings/payment-callback',
-          callbackPayload,
-          { headers },
-        );
-        return res.data?.data || res.data;
-      } catch (fallbackErr) {
-        throw mapBookingServiceError(fallbackErr, 'BOOKING_PAYMENT_CALLBACK_FAILED');
-      }
-    }
-    throw mapBookingServiceError(err, 'BOOKING_PAYMENT_CALLBACK_FAILED');
-  }
-}
-
-async function markBookingPaymentFailed(bookingId, paymentReferenceId, token, contextHeaders = {}) {
-  const safeBookingId = sanitizePathParam(bookingId, 'bookingId');
-  const safePaymentReferenceId = sanitizePathParam(paymentReferenceId, 'paymentReferenceId');
-  const callbackPayload = {
-    bookingId: safeBookingId,
-    paymentReferenceId: safePaymentReferenceId,
-    paymentStatus: 'FAILED',
-    transactionId: safePaymentReferenceId,
-  };
-  const headers = {
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    ...contextHeaders,
-  };
-  try {
-    const res = await client.post(
-      '/bookings/payment-callback',
-      callbackPayload,
-      { headers },
-    );
-    return res.data?.data || res.data;
-  } catch (err) {
-    if (err.response?.status === 404) {
       try {
         const res = await client.post(
           '/api/bookings/payment-callback',
