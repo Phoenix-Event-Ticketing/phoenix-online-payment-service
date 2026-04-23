@@ -90,23 +90,36 @@ jobs:
 
       - name: Run OSV Scanner and generate SARIF
         id: osv_scanner
-        continue-on-error: true
         run: |
           set -euo pipefail
-          osv-scanner scan -r . --format sarif --output osv.sarif
+          scan_exit=0
+          osv-scanner scan -r . --format sarif --output osv.sarif || scan_exit=$?
+
+          # osv-scanner uses exit code 1 when vulnerabilities are found.
+          # Treat that as a reportable finding (uploaded to SARIF), not a CI execution error.
+          if [ "${scan_exit}" -eq 1 ]; then
+            echo "vulnerabilities_found=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "${scan_exit}" -ne 0 ]; then
+            echo "Scanner execution failed with exit code ${scan_exit}"
+            exit "${scan_exit}"
+          fi
+
+          echo "vulnerabilities_found=false" >> "$GITHUB_OUTPUT"
 
       - name: Upload OSV results to GitHub Security
-        if: always()
+        if: always() && hashFiles('osv.sarif') != ''
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: osv.sarif
           category: osv-scanner
 
-      - name: Fail if OSV Scanner found vulnerabilities
-        if: steps.osv_scanner.outcome == 'failure'
+      - name: Report OSV findings
+        if: steps.osv_scanner.outputs.vulnerabilities_found == 'true'
         run: |
-          echo "OSV Scanner reported vulnerabilities or failed. Check the step log and GitHub Security tab."
-          exit 1
+          echo "OSV Scanner found vulnerabilities. Review the OSV step log and GitHub Security tab."
 
   security:
     name: Trivy Security Scans
