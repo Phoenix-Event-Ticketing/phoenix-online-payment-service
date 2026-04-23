@@ -49,7 +49,14 @@ describe('payment.controller', () => {
       await handleCreatePayment(req, res, next);
 
       expect(paymentService.createPayment).toHaveBeenCalledWith(req.user, req.body, 'token123');
-      expect(created).toHaveBeenCalledWith(res, payment);
+      expect(created).toHaveBeenCalledWith(
+        res,
+        expect.objectContaining({
+          paymentId: 'p1',
+          id: 'p1',
+          paymentReferenceId: 'p1',
+        }),
+      );
       expect(next).not.toHaveBeenCalled();
     });
 
