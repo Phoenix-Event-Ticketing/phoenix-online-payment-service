@@ -26,56 +26,16 @@ function sanitizePathParam(value, fieldName) {
   return encodeURIComponent(value);
 }
 
-function handleAxiosError(error) {
-  if (error.response) {
-    const upstreamStatus = error.response.status;
-    const upstreamMessage =
-      error.response.data?.message || `Booking service error: ${error.message}`;
-
-    // Return a clear upstream dependency error so clients know this came
-    // from Booking service, not from Payment service auth middleware.
-    if (upstreamStatus === 401 || upstreamStatus === 403) {
-      throw new AppError(
-        `Booking service rejected payment pre-check: ${upstreamMessage}`,
-        502,
-        'BOOKING_SERVICE_AUTH_REJECTED',
-        {
-          upstreamService: 'booking-service',
-          upstreamStatus,
-        },
-      );
-    }
-
-    // The request was made and the server responded with a status code
-    // that falls out of the range of 2xx
-    throw new AppError(
-      upstreamMessage,
-      upstreamStatus,
-      error.response.data?.errorCode || 'BOOKING_SERVICE_ERROR',
-      error.response.data?.details,
-    );
-  } else if (error.request) {
-    // The request was made but no response was received
-    throw new AppError(
-      'Booking service request failed: No response received',
-      503,
-      'BOOKING_SERVICE_UNAVAILABLE',
-    );
-  } else {
-    // Something happened in setting up the request
-    throw new AppError(
-      `Booking service error: ${error.message}`,
-      500,
-      'BOOKING_SERVICE_ERROR',
-    );
-  }
-}
-
 function buildHeaders(token, contextHeaders = {}) {
   return {
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...contextHeaders,
   };
+}
+
+async function getBookingById(bookingId, token, contextHeaders = {}) {
+  const safeBookingId = sanitizePathParam(bookingId, 'bookingId');
+  const headers = buildHeaders(token, contextHeaders);
 
   try {
     const res = await client.get(`/bookings/${safeBookingId}`, { headers });
