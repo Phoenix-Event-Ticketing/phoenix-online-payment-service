@@ -1,5 +1,6 @@
 const axios = require('axios');
 const env = require('../config/env');
+const { createInternalServiceAuthorizationHeader } = require('../services/internalServiceToken');
 const {
   badRequest,
   unauthorized,
@@ -7,6 +8,9 @@ const {
   notFound,
   AppError,
 } = require('../common/errors');
+
+const VIEW_BOOKINGS_PERMISSION = 'VIEW_BOOKINGS';
+const PAYMENT_CALLBACK_PERMISSION = 'PAYMENT_CALLBACK';
 
 const client = axios.create({
   baseURL: env.bookingServiceBaseUrl,
@@ -26,16 +30,20 @@ function sanitizePathParam(value, fieldName) {
   return encodeURIComponent(value);
 }
 
-function buildHeaders(token, contextHeaders = {}) {
+function buildHeaders(token, fallbackPermission, contextHeaders = {}) {
+  const authorization = token
+    ? `Bearer ${token}`
+    : createInternalServiceAuthorizationHeader([fallbackPermission]);
   return {
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    Authorization: authorization,
+    'X-Internal-Service-Id': env.internalServiceId || env.serviceName || 'payment-service',
     ...contextHeaders,
   };
 }
 
 async function getBookingById(bookingId, token, contextHeaders = {}) {
   const safeBookingId = sanitizePathParam(bookingId, 'bookingId');
-  const headers = buildHeaders(token, contextHeaders);
+  const headers = buildHeaders(token, VIEW_BOOKINGS_PERMISSION, contextHeaders);
 
   try {
     const res = await client.get(`/bookings/${safeBookingId}`, { headers });
@@ -89,7 +97,7 @@ async function postBookingPaymentCallback(
     paymentStatus,
     transactionId: safePaymentReferenceId,
   };
-  const headers = buildHeaders(token, contextHeaders);
+  const headers = buildHeaders(token, PAYMENT_CALLBACK_PERMISSION, contextHeaders);
 
   try {
     const res = await client.post(

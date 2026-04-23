@@ -1,10 +1,13 @@
 const express = require('express');
 const auth = require('../../middleware/auth.middleware');
+const { authorizeInternal } = require('../../middleware/internalAuth.middleware');
 const { authorize, ROLES } = require('../../middleware/role.middleware');
+const { INTERNAL_PERMISSIONS } = require('../../common/constants/internalPermissions');
 const validate = require('../../middleware/validate.middleware');
 const { mutationRateLimit } = require('../../middleware/rateLimit.middleware');
 const {
   createPaymentSchema,
+  createInternalPaymentSchema,
   getPaymentByIdSchema,
   getPaymentsQuerySchema,
   updatePaymentStatusSchema,
@@ -12,6 +15,7 @@ const {
 } = require('./payment.validation');
 const {
   handleCreatePayment,
+  handleCreateInternalPayment,
   handleGetPaymentById,
   handleGetPayments,
   handleUpdatePaymentStatus,
@@ -28,6 +32,15 @@ router.post(
   mutationRateLimit,
   validate(createPaymentSchema),
   handleCreatePayment,
+);
+
+// Internal create payment for booking-service.
+router.post(
+  '/internal/payments',
+  authorizeInternal([INTERNAL_PERMISSIONS.CREATE_PAYMENT_INTERNAL]),
+  mutationRateLimit,
+  validate(createInternalPaymentSchema),
+  handleCreateInternalPayment,
 );
 
 // List payments: user sees own; admin can pass ?all=true to see all

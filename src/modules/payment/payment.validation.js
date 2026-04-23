@@ -16,6 +16,20 @@ const createPaymentSchema = {
   }),
 };
 
+const createInternalPaymentSchema = {
+  body: z.object({
+    bookingId: z.string().min(1),
+    userId: z.string().min(1),
+    amount: z.number().positive(),
+    currency: z.string().min(1).optional(),
+    paymentMethod: z.string().min(1).optional(),
+    customerEmail: z.string().email().optional(),
+    callbackUrl: z.string().url().optional(),
+    description: z.string().min(1).optional(),
+    metadata: z.record(z.any()).optional(),
+  }),
+};
+
 const getPaymentByIdSchema = {
   params: z.object({
     id: z.string().min(1),
@@ -48,6 +62,7 @@ const cancelPaymentSchema = {
 
 module.exports = {
   createPaymentSchema,
+  createInternalPaymentSchema,
   getPaymentByIdSchema,
   getPaymentsQuerySchema,
   updatePaymentStatusSchema,

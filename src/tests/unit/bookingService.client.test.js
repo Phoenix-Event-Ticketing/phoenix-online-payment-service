@@ -13,9 +13,15 @@ jest.mock('axios', () => {
 
 jest.mock('../../config/env', () => ({
   bookingServiceBaseUrl: 'http://booking-service',
+  internalServiceId: 'payment-service',
+  serviceName: 'payment-service',
+}));
+jest.mock('../../services/internalServiceToken', () => ({
+  createInternalServiceAuthorizationHeader: jest.fn(() => 'Bearer internal-token'),
 }));
 
 const axios = require('axios');
+const { createInternalServiceAuthorizationHeader } = require('../../services/internalServiceToken');
 const {
   getBookingById,
   markBookingAsPaid,
@@ -48,7 +54,7 @@ describe('bookingService.client', () => {
       const result = await getBookingById('b1', 'token');
 
       expect(mockGet).toHaveBeenCalledWith('/bookings/b1', {
-        headers: { Authorization: 'Bearer token' },
+        headers: { Authorization: 'Bearer token', 'X-Internal-Service-Id': 'payment-service' },
       });
       expect(result).toEqual({ id: 'b1', status: 'PENDING' });
     });
@@ -59,7 +65,7 @@ describe('bookingService.client', () => {
       const result = await getBookingById('b1', null);
 
       expect(mockGet).toHaveBeenCalledWith('/bookings/b1', {
-        headers: {},
+        headers: { Authorization: 'Bearer internal-token', 'X-Internal-Service-Id': 'payment-service' },
       });
       expect(result).toEqual({ id: 'b1' });
     });
@@ -69,8 +75,9 @@ describe('bookingService.client', () => {
 
       await getBookingById('b1', null);
 
+      expect(createInternalServiceAuthorizationHeader).toHaveBeenCalledWith(['VIEW_BOOKINGS']);
       expect(mockGet).toHaveBeenCalledWith('/bookings/b1', {
-        headers: {},
+        headers: { Authorization: 'Bearer internal-token', 'X-Internal-Service-Id': 'payment-service' },
       });
     });
 
@@ -114,10 +121,10 @@ describe('bookingService.client', () => {
 
       expect(mockGet).toHaveBeenCalledTimes(2);
       expect(mockGet).toHaveBeenNthCalledWith(1, '/bookings/b1', {
-        headers: { Authorization: 'Bearer token' },
+        headers: { Authorization: 'Bearer token', 'X-Internal-Service-Id': 'payment-service' },
       });
       expect(mockGet).toHaveBeenNthCalledWith(2, '/api/bookings/b1', {
-        headers: { Authorization: 'Bearer token' },
+        headers: { Authorization: 'Bearer token', 'X-Internal-Service-Id': 'payment-service' },
       });
       expect(result).toEqual({ id: 'b1' });
     });
@@ -179,7 +186,7 @@ describe('bookingService.client', () => {
           paymentStatus: 'SUCCESS',
           transactionId: 'p1',
         },
-        { headers: { Authorization: 'Bearer token' } },
+        { headers: { Authorization: 'Bearer token', 'X-Internal-Service-Id': 'payment-service' } },
       );
       expect(result).toEqual({ id: 'b1', paymentId: 'p1' });
     });
@@ -252,7 +259,7 @@ describe('bookingService.client', () => {
           paymentStatus: 'FAILED',
           transactionId: 'p1',
         },
-        { headers: { Authorization: 'Bearer token' } },
+        { headers: { Authorization: 'Bearer token', 'X-Internal-Service-Id': 'payment-service' } },
       );
     });
 

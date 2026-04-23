@@ -26,6 +26,7 @@ async function createAuditLog(eventType, paymentId, actorId, oldStatus = null, n
 async function createPayment(user, payload, authToken) {
   const {
     bookingId,
+    userId,
     amount,
     currency,
     paymentMethod,
@@ -42,9 +43,14 @@ async function createPayment(user, payload, authToken) {
   // Verify booking exists; Booking Service can also enforce ownership.
   await getBookingById(bookingId, authToken);
 
+  const resolvedUserId = userId || user?.id;
+  if (!resolvedUserId) {
+    throw badRequest('userId is required for payment creation');
+  }
+
   const payment = await Payment.create({
     bookingId,
-    userId: user.id,
+    userId: resolvedUserId,
     amount,
     currency: currency || 'LKR',
     paymentMethod: paymentMethod || 'CARD',

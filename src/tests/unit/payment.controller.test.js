@@ -15,6 +15,7 @@ const paymentService = require('../../modules/payment/payment.service');
 const { created, success } = require('../../common/utils/response');
 const {
   handleCreatePayment,
+  handleCreateInternalPayment,
   handleGetPaymentById,
   handleGetPayments,
   handleUpdatePaymentStatus,
@@ -51,11 +52,7 @@ describe('payment.controller', () => {
       expect(paymentService.createPayment).toHaveBeenCalledWith(req.user, req.body, 'token123');
       expect(created).toHaveBeenCalledWith(
         res,
-        expect.objectContaining({
-          paymentId: 'p1',
-          id: 'p1',
-          paymentReferenceId: 'p1',
-        }),
+        expect.objectContaining({ paymentId: 'p1', id: 'p1', paymentReferenceId: 'p1' }),
       );
       expect(next).not.toHaveBeenCalled();
     });
@@ -76,6 +73,23 @@ describe('payment.controller', () => {
       await handleCreatePayment(req, res, next);
 
       expect(next).toHaveBeenCalled();
+    });
+  });
+
+  describe('handleCreateInternalPayment', () => {
+    it('creates payment without forwarding bearer token', async () => {
+      req.body = { bookingId: 'b1', userId: 'u1', amount: 10, currency: 'USD', paymentMethod: 'CARD' };
+      req.headers.authorization = 'Bearer service-token';
+      const payment = { paymentId: 'p1' };
+      paymentService.createPayment.mockResolvedValue(payment);
+
+      await handleCreateInternalPayment(req, res, next);
+
+      expect(paymentService.createPayment).toHaveBeenCalledWith(req.user, req.body, undefined);
+      expect(created).toHaveBeenCalledWith(
+        res,
+        expect.objectContaining({ paymentId: 'p1', id: 'p1', paymentReferenceId: 'p1' }),
+      );
     });
   });
 

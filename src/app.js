@@ -34,7 +34,7 @@ function createApp() {
           ? '*'
           : env.corsOrigin.split(',').map((o) => o.trim()),
       methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-Id'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-Id', 'X-Internal-Service-Id'],
     }),
   );
 
