@@ -7,12 +7,14 @@ const {
   createRefundSchema,
   getRefundByIdSchema,
   getRefundsByPaymentSchema,
+  getRefundsQuerySchema,
   updateRefundStatusSchema,
 } = require('./refund.validation');
 const {
   handleCreateRefund,
   handleProcessRefund,
   handleGetRefundById,
+  handleGetRefunds,
   handleGetRefundsForPayment,
 } = require('./refund.controller');
 
@@ -36,6 +38,15 @@ router.patch(
   mutationRateLimit,
   validate(updateRefundStatusSchema),
   handleProcessRefund,
+);
+
+// Get refunds list
+router.get(
+  '/refunds',
+  auth,
+  authorize([ROLES.USER, ROLES.ADMIN]),
+  validate(getRefundsQuerySchema),
+  handleGetRefunds,
 );
 
 // Get refund by id

@@ -3,6 +3,7 @@ const {
   processRefund,
   getRefundById,
   getRefundsForPayment,
+  getRefunds,
 } = require('./refund.service');
 const { created, success } = require('../../common/utils/response');
 
@@ -42,10 +43,20 @@ async function handleGetRefundsForPayment(req, res, next) {
   }
 }
 
+async function handleGetRefunds(req, res, next) {
+  try {
+    const refunds = await getRefunds(req.user, { all: req.query.all });
+    return success(res, refunds);
+  } catch (err) {
+    return next(err);
+  }
+}
+
 module.exports = {
   handleCreateRefund,
   handleProcessRefund,
   handleGetRefundById,
   handleGetRefundsForPayment,
+  handleGetRefunds,
 };
 

@@ -2,6 +2,7 @@ jest.mock('../../modules/refund/refund.service', () => ({
   requestRefund: jest.fn(),
   processRefund: jest.fn(),
   getRefundById: jest.fn(),
+  getRefunds: jest.fn(),
   getRefundsForPayment: jest.fn(),
 }));
 
@@ -16,6 +17,7 @@ const {
   handleCreateRefund,
   handleProcessRefund,
   handleGetRefundById,
+  handleGetRefunds,
   handleGetRefundsForPayment,
 } = require('../../modules/refund/refund.controller');
 
@@ -112,6 +114,20 @@ describe('refund.controller', () => {
       await handleGetRefundsForPayment(req, res, next);
 
       expect(refundService.getRefundsForPayment).toHaveBeenCalledWith(req.user, 'p1');
+      expect(success).toHaveBeenCalledWith(res, refunds);
+      expect(next).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('handleGetRefunds', () => {
+    it('returns refund list on success', async () => {
+      req.query = { all: 'true' };
+      const refunds = [{ refundId: 'r1' }];
+      refundService.getRefunds.mockResolvedValue(refunds);
+
+      await handleGetRefunds(req, res, next);
+
+      expect(refundService.getRefunds).toHaveBeenCalledWith(req.user, { all: 'true' });
       expect(success).toHaveBeenCalledWith(res, refunds);
       expect(next).not.toHaveBeenCalled();
     });

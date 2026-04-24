@@ -145,10 +145,23 @@ async function getRefundsForPayment(user, paymentId) {
   return Refund.find(query).sort({ createdAt: -1 });
 }
 
+async function getRefunds(user, { all } = {}) {
+  if (user.role === 'ADMIN' && all) {
+    return Refund.find().sort({ createdAt: -1 });
+  }
+
+  if (user.role === 'ADMIN') {
+    return Refund.find().sort({ createdAt: -1 });
+  }
+
+  return Refund.find({ userId: user.id }).sort({ createdAt: -1 });
+}
+
 module.exports = {
   requestRefund,
   processRefund,
   getRefundById,
   getRefundsForPayment,
+  getRefunds,
 };
 

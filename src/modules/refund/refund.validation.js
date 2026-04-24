@@ -20,6 +20,15 @@ const getRefundsByPaymentSchema = {
   }),
 };
 
+const getRefundsQuerySchema = {
+  query: z.object({
+    all: z
+      .string()
+      .optional()
+      .transform((val) => val === 'true'),
+  }),
+};
+
 const updateRefundStatusSchema = {
   params: z.object({
     id: z.string().min(1),
@@ -33,6 +42,7 @@ module.exports = {
   createRefundSchema,
   getRefundByIdSchema,
   getRefundsByPaymentSchema,
+  getRefundsQuerySchema,
   updateRefundStatusSchema,
 };
 

@@ -262,4 +262,27 @@ describe('refund.service', () => {
       expect(Refund.find).toHaveBeenCalledWith({ paymentId: 'p1' });
     });
   });
+
+  describe('getRefunds', () => {
+    it('returns refunds for user with userId filter', async () => {
+      Refund.find.mockReturnValue({
+        sort: jest.fn().mockResolvedValue([{ refundId: 'r1' }]),
+      });
+
+      const list = await refundService.getRefunds(user, { all: false });
+
+      expect(Refund.find).toHaveBeenCalledWith({ userId: 'user-1' });
+      expect(list).toEqual([{ refundId: 'r1' }]);
+    });
+
+    it('admin gets all refunds', async () => {
+      Refund.find.mockReturnValue({
+        sort: jest.fn().mockResolvedValue([{ refundId: 'r1' }]),
+      });
+
+      await refundService.getRefunds({ id: 'admin', role: 'ADMIN' }, { all: true });
+
+      expect(Refund.find).toHaveBeenCalledWith();
+    });
+  });
 });
