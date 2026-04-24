@@ -66,6 +66,61 @@ describe('payment.service', () => {
       ).rejects.toMatchObject({ statusCode: 400 });
       expect(getBookingById).not.toHaveBeenCalled();
     });
+
+    it('rejects when userId cannot be resolved', async () => {
+      getBookingById.mockResolvedValue({ id: 'b1' });
+
+      await expect(
+        paymentService.createPayment(
+          {},
+          { bookingId: 'b1', amount: 10 },
+          'tok',
+        ),
+      ).rejects.toMatchObject({
+        statusCode: 400,
+        message: 'userId is required for payment creation',
+      });
+      expect(getBookingById).toHaveBeenCalledWith('b1', 'tok');
+      expect(Payment.create).not.toHaveBeenCalled();
+    });
+
+    it('uses userId from payload when provided', async () => {
+      getBookingById.mockResolvedValue({ id: 'b1' });
+      const created = {
+        paymentId: 'pay-1',
+        bookingId: 'b1',
+        userId: 'explicit-user',
+        status: PAYMENT_STATUS.PENDING,
+      };
+      Payment.create.mockResolvedValue(created);
+      PaymentAuditLog.create.mockResolvedValue({});
+
+      await paymentService.createPayment(
+        { id: 'ignored', role: 'USER' },
+        {
+          bookingId: 'b1',
+          userId: 'explicit-user',
+          amount: 5,
+          customerEmail: 'a@b.com',
+          callbackUrl: 'https://cb',
+          description: 'desc',
+        },
+        'tok',
+      );
+
+      expect(Payment.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'explicit-user',
+          currency: 'LKR',
+          paymentMethod: 'CARD',
+          metadata: expect.objectContaining({
+            customerEmail: 'a@b.com',
+            callbackUrl: 'https://cb',
+            description: 'desc',
+          }),
+        }),
+      );
+    });
   });
 
   describe('getPaymentById', () => {
@@ -103,6 +158,19 @@ describe('payment.service', () => {
   });
 
   describe('updatePaymentStatus', () => {
+    it('rejects when payment not found', async () => {
+      Payment.findOne.mockResolvedValue(null);
+
+      await expect(
+        paymentService.updatePaymentStatus(
+          { id: 'admin', role: 'ADMIN' },
+          'missing',
+          PAYMENT_STATUS.SUCCESS,
+          'tok',
+        ),
+      ).rejects.toMatchObject({ statusCode: 404 });
+    });
+
     it('treats duplicate update as no-op', async () => {
       const payment = {
         paymentId: 'p1',
@@ -207,6 +275,51 @@ describe('payment.service', () => {
         expect.objectContaining({ eventType: 'BOOKING_MARK_PAID_FAILED' }),
       );
     });
+
+    it('records audit when markBookingPaymentFailed throws', async () => {
+      const payment = {
+        paymentId: 'p1',
+        bookingId: 'b1',
+        status: PAYMENT_STATUS.PROCESSING,
+        save: jest.fn().mockResolvedValue(true),
+      };
+      Payment.findOne.mockResolvedValue(payment);
+      PaymentAuditLog.create.mockResolvedValue({});
+      markBookingPaymentFailed.mockRejectedValue(new Error('callback down'));
+
+      await paymentService.updatePaymentStatus(
+        { id: 'admin', role: 'ADMIN' },
+        'p1',
+        PAYMENT_STATUS.FAILED,
+        'tok',
+      );
+
+      expect(PaymentAuditLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({ eventType: 'BOOKING_MARK_FAILED_FAILED' }),
+      );
+    });
+
+    it('uses transactionReference for failed booking callback when set', async () => {
+      const payment = {
+        paymentId: 'p1',
+        bookingId: 'b1',
+        transactionReference: 'txn-ref',
+        status: PAYMENT_STATUS.PROCESSING,
+        save: jest.fn().mockResolvedValue(true),
+      };
+      Payment.findOne.mockResolvedValue(payment);
+      PaymentAuditLog.create.mockResolvedValue({});
+      markBookingPaymentFailed.mockResolvedValue({});
+
+      await paymentService.updatePaymentStatus(
+        { id: 'admin', role: 'ADMIN' },
+        'p1',
+        PAYMENT_STATUS.FAILED,
+        'tok',
+      );
+
+      expect(markBookingPaymentFailed).toHaveBeenCalledWith('b1', 'txn-ref', 'tok');
+    });
   });
 
   describe('completePayment', () => {
@@ -253,6 +366,56 @@ describe('payment.service', () => {
 
       expect(out.status).toBe(PAYMENT_STATUS.SUCCESS);
       expect(markBookingAsPaid).not.toHaveBeenCalled();
+    });
+
+    it('rejects when payment not found', async () => {
+      Payment.findOne.mockResolvedValue(null);
+
+      await expect(
+        paymentService.completePayment(
+          { id: 'user-1', role: 'USER' },
+          'p1',
+          PAYMENT_STATUS.SUCCESS,
+          'tok',
+        ),
+      ).rejects.toMatchObject({ statusCode: 404 });
+    });
+
+    it('forbids completion when user does not own payment', async () => {
+      Payment.findOne.mockResolvedValue({
+        paymentId: 'p1',
+        userId: 'other',
+        status: PAYMENT_STATUS.PENDING,
+      });
+
+      await expect(
+        paymentService.completePayment(
+          { id: 'user-1', role: 'USER' },
+          'p1',
+          PAYMENT_STATUS.SUCCESS,
+          'tok',
+        ),
+      ).rejects.toMatchObject({ statusCode: 403 });
+    });
+
+    it('rejects unsupported completion status', async () => {
+      Payment.findOne.mockResolvedValue({
+        paymentId: 'p1',
+        userId: 'user-1',
+        status: PAYMENT_STATUS.PENDING,
+      });
+
+      await expect(
+        paymentService.completePayment(
+          { id: 'user-1', role: 'USER' },
+          'p1',
+          PAYMENT_STATUS.PENDING,
+          'tok',
+        ),
+      ).rejects.toMatchObject({
+        statusCode: 400,
+        code: 'INVALID_COMPLETION_STATUS',
+      });
     });
   });
 

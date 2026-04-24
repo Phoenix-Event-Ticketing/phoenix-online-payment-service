@@ -146,7 +146,10 @@ function mapBookingServiceError(err, defaultCode) {
     'Booking service is unavailable',
     502,
     defaultCode,
-    { upstreamStatus: upstreamStatus || null },
+    {
+      upstreamStatus: upstreamStatus || null,
+      upstreamMessage,
+    },
   );
 }
 
