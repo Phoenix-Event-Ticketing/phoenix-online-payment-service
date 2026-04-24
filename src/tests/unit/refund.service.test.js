@@ -33,11 +33,11 @@ describe('refund.service', () => {
   });
 
   describe('requestRefund', () => {
-    it('creates refund for successful payment owned by user', async () => {
+    it('creates refund for failed payment owned by user', async () => {
       const payment = {
         paymentId: 'p1',
         userId: 'user-1',
-        status: PAYMENT_STATUS.SUCCESS,
+        status: PAYMENT_STATUS.FAILED,
         amount: 100,
         save: jest.fn().mockResolvedValue(true),
       };
@@ -68,11 +68,11 @@ describe('refund.service', () => {
       ).rejects.toMatchObject({ statusCode: 400 });
     });
 
-    it('rejects when payment not successful', async () => {
+    it('rejects when payment is not failed or cancelled', async () => {
       Payment.findOne.mockResolvedValue({
         paymentId: 'p1',
         userId: 'user-1',
-        status: PAYMENT_STATUS.PENDING,
+        status: PAYMENT_STATUS.SUCCESS,
         amount: 100,
         save: jest.fn(),
       });
@@ -83,7 +83,7 @@ describe('refund.service', () => {
           refundAmount: 10,
           refundReason: 'x',
         }),
-      ).rejects.toMatchObject({ code: 'REFUND_ONLY_SUCCESS' });
+      ).rejects.toMatchObject({ code: 'REFUND_ONLY_FAILED_OR_CANCELLED' });
     });
 
     it('rejects when payment not found', async () => {
@@ -102,7 +102,7 @@ describe('refund.service', () => {
       Payment.findOne.mockResolvedValue({
         paymentId: 'p1',
         userId: 'user-1',
-        status: PAYMENT_STATUS.SUCCESS,
+        status: PAYMENT_STATUS.CANCELLED,
         amount: 100,
         save: jest.fn(),
       });

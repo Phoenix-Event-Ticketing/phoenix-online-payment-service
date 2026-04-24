@@ -32,10 +32,11 @@ async function requestRefund(user, payload) {
     throw forbidden('You do not have access to refund this payment');
   }
 
-  if (payment.status !== PAYMENT_STATUS.SUCCESS) {
+  const refundableStatuses = [PAYMENT_STATUS.FAILED, PAYMENT_STATUS.CANCELLED];
+  if (!refundableStatuses.includes(payment.status)) {
     throw badRequest(
-      'Only successful payments can be refunded',
-      'REFUND_ONLY_SUCCESS',
+      'Only failed or cancelled payments can be refunded',
+      'REFUND_ONLY_FAILED_OR_CANCELLED',
     );
   }
 
