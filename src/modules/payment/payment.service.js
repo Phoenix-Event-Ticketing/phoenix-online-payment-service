@@ -185,7 +185,7 @@ async function updatePaymentStatus(actor, paymentId, newStatus, authToken) {
   return payment;
 }
 
-async function completePayment(actor, paymentId, newStatus, authToken) {
+async function completePayment(actor, paymentId, newStatus, authToken, paymentMethod) {
   const payment = await Payment.findOne({ paymentId });
   if (!payment) {
     throw notFound('Payment not found');
@@ -197,6 +197,14 @@ async function completePayment(actor, paymentId, newStatus, authToken) {
 
   if (newStatus !== PAYMENT_STATUS.SUCCESS && newStatus !== PAYMENT_STATUS.FAILED) {
     throw badRequest('Unsupported completion status', 'INVALID_COMPLETION_STATUS');
+  }
+
+  if (paymentMethod) {
+    const allowedPaymentMethods = new Set(['CARD', 'BANK_TRANSFER', 'WALLET']);
+    if (!allowedPaymentMethods.has(paymentMethod)) {
+      throw badRequest('Unsupported payment method', 'INVALID_PAYMENT_METHOD');
+    }
+    payment.paymentMethod = paymentMethod;
   }
 
   if (payment.status === newStatus) {

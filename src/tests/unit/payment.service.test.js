@@ -417,6 +417,31 @@ describe('payment.service', () => {
         code: 'INVALID_COMPLETION_STATUS',
       });
     });
+
+    it('updates payment method from completion payload before success', async () => {
+      const payment = {
+        paymentId: 'p1',
+        bookingId: 'b1',
+        userId: 'user-1',
+        paymentMethod: 'CARD',
+        status: PAYMENT_STATUS.PENDING,
+        save: jest.fn().mockResolvedValue(true),
+      };
+      Payment.findOne.mockResolvedValue(payment);
+      PaymentAuditLog.create.mockResolvedValue({});
+      markBookingAsPaid.mockResolvedValue({});
+
+      const out = await paymentService.completePayment(
+        { id: 'user-1', role: 'USER' },
+        'p1',
+        PAYMENT_STATUS.SUCCESS,
+        'tok',
+        'BANK_TRANSFER',
+      );
+
+      expect(out.paymentMethod).toBe('BANK_TRANSFER');
+      expect(markBookingAsPaid).toHaveBeenCalledWith('b1', 'p1', 'tok');
+    });
   });
 
   describe('cancelPayment', () => {

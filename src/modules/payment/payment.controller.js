@@ -91,6 +91,7 @@ async function handleCompletePayment(req, res, next) {
       req.params.id,
       req.body.status,
       extractBearerToken(req.headers.authorization),
+      req.body.paymentMethod,
     );
     return success(res, payment);
   } catch (err) {

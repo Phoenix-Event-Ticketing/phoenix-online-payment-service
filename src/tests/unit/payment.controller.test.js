@@ -285,14 +285,20 @@ describe('payment.controller', () => {
   describe('handleCompletePayment', () => {
     it('completes payment with bearer token', async () => {
       req.params = { id: 'p1' };
-      req.body = { status: 'SUCCESS' };
+      req.body = { status: 'SUCCESS', paymentMethod: 'BANK_TRANSFER' };
       req.headers.authorization = 'Bearer tok';
       const payment = { paymentId: 'p1', status: 'SUCCESS' };
       paymentService.completePayment.mockResolvedValue(payment);
 
       await handleCompletePayment(req, res, next);
 
-      expect(paymentService.completePayment).toHaveBeenCalledWith(req.user, 'p1', 'SUCCESS', 'tok');
+      expect(paymentService.completePayment).toHaveBeenCalledWith(
+        req.user,
+        'p1',
+        'SUCCESS',
+        'tok',
+        'BANK_TRANSFER',
+      );
       expect(success).toHaveBeenCalledWith(res, payment);
     });
 

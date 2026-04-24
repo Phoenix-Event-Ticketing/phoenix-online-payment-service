@@ -60,6 +60,7 @@ const completePaymentSchema = {
   }),
   body: z.object({
     status: z.enum([PAYMENT_STATUS.SUCCESS, PAYMENT_STATUS.FAILED]),
+    paymentMethod: z.enum(['CARD', 'BANK_TRANSFER', 'WALLET']).optional(),
   }),
 };
 
