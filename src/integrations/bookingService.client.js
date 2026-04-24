@@ -49,15 +49,6 @@ async function getBookingById(bookingId, token, contextHeaders = {}) {
     const res = await client.get(`/bookings/${safeBookingId}`, { headers });
     return res.data?.data || res.data;
   } catch (err) {
-    if (err.response?.status === 404) {
-      // Backward-compatible fallback while environments are moved off /api-prefixed routes.
-      try {
-        const res = await client.get(`/api/bookings/${safeBookingId}`, { headers });
-        return res.data?.data || res.data;
-      } catch (fallbackErr) {
-        throw mapBookingServiceError(fallbackErr, 'BOOKING_LOOKUP_FAILED');
-      }
-    }
     throw mapBookingServiceError(err, 'BOOKING_LOOKUP_FAILED');
   }
 }
@@ -107,19 +98,6 @@ async function postBookingPaymentCallback(
     );
     return res.data?.data || res.data;
   } catch (err) {
-    if (err.response?.status === 404) {
-      // Backward-compatible fallback for deployments exposing /api prefix.
-      try {
-        const res = await client.post(
-          '/api/bookings/payment-callback',
-          callbackPayload,
-          { headers },
-        );
-        return res.data?.data || res.data;
-      } catch (fallbackErr) {
-        throw mapBookingServiceError(fallbackErr, 'BOOKING_PAYMENT_CALLBACK_FAILED');
-      }
-    }
     throw mapBookingServiceError(err, 'BOOKING_PAYMENT_CALLBACK_FAILED');
   }
 }

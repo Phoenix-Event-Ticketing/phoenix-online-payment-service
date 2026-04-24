@@ -112,33 +112,17 @@ describe('bookingService.client', () => {
       expect(mockGet).toHaveBeenCalledTimes(1);
     });
 
-    it('retries with /api prefix only when first call is 404', async () => {
-      mockGet
-        .mockRejectedValueOnce({ response: { status: 404 }, message: 'Not Found' })
-        .mockResolvedValueOnce({ data: { data: { id: 'b1' } } });
-
-      const result = await getBookingById('b1', 'token');
-
-      expect(mockGet).toHaveBeenCalledTimes(2);
-      expect(mockGet).toHaveBeenNthCalledWith(1, '/bookings/b1', {
-        headers: { Authorization: 'Bearer token', 'X-Internal-Service-Id': 'payment-service' },
+    it('maps upstream 404 to not found app error', async () => {
+      mockGet.mockRejectedValueOnce({
+        response: { status: 404 },
+        message: 'Not Found',
       });
-      expect(mockGet).toHaveBeenNthCalledWith(2, '/api/bookings/b1', {
-        headers: { Authorization: 'Bearer token', 'X-Internal-Service-Id': 'payment-service' },
-      });
-      expect(result).toEqual({ id: 'b1' });
-    });
-
-    it('maps fallback lookup failure after 404 retry', async () => {
-      mockGet
-        .mockRejectedValueOnce({ response: { status: 404 }, message: 'Not Found' })
-        .mockRejectedValueOnce({ response: { status: 404 }, message: 'Still not found' });
 
       await expect(getBookingById('b1', 'token')).rejects.toMatchObject({
         statusCode: 404,
         code: 'BOOKING_LOOKUP_FAILED',
       });
-      expect(mockGet).toHaveBeenCalledTimes(2);
+      expect(mockGet).toHaveBeenCalledTimes(1);
     });
 
     it('maps upstream 400 to bad request app error', async () => {
@@ -206,11 +190,7 @@ describe('bookingService.client', () => {
       });
     });
 
-    it('maps direct upstream 404 to not found when no fallback retry applies', async () => {
-      mockGet.mockRejectedValueOnce({
-        response: { status: 404 },
-      });
-      // First call is 404 so retry happens; force retry to non-404 mapped notFound by mapper.
+    it('maps direct upstream 404 to not found', async () => {
       mockGet.mockRejectedValueOnce({
         response: { status: 404 },
       });
@@ -219,7 +199,7 @@ describe('bookingService.client', () => {
         statusCode: 404,
         code: 'BOOKING_LOOKUP_FAILED',
       });
-      expect(mockGet).toHaveBeenCalledTimes(2);
+      expect(mockGet).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -294,27 +274,14 @@ describe('bookingService.client', () => {
       );
     });
 
-    it('retries callback with /api prefix on 404', async () => {
-      mockPost
-        .mockRejectedValueOnce({ response: { status: 404 }, message: 'Not Found' })
-        .mockResolvedValueOnce({ data: { data: { ok: true } } });
+    it('maps callback 404 error to app not found', async () => {
+      mockPost.mockRejectedValueOnce({ response: { status: 404 }, message: 'Not Found' });
 
-      const result = await markBookingAsPaid('b1', 'p1', 'token');
-
-      expect(mockPost).toHaveBeenCalledTimes(2);
-      expect(mockPost).toHaveBeenNthCalledWith(
-        1,
-        '/bookings/payment-callback',
-        expect.objectContaining({ paymentStatus: 'SUCCESS' }),
-        { headers: { Authorization: 'Bearer token', 'X-Internal-Service-Id': 'payment-service' } },
-      );
-      expect(mockPost).toHaveBeenNthCalledWith(
-        2,
-        '/api/bookings/payment-callback',
-        expect.objectContaining({ paymentStatus: 'SUCCESS' }),
-        { headers: { Authorization: 'Bearer token', 'X-Internal-Service-Id': 'payment-service' } },
-      );
-      expect(result).toEqual({ ok: true });
+      await expect(markBookingAsPaid('b1', 'p1', 'token')).rejects.toMatchObject({
+        statusCode: 404,
+        code: 'BOOKING_PAYMENT_CALLBACK_FAILED',
+      });
+      expect(mockPost).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -347,16 +314,14 @@ describe('bookingService.client', () => {
       expect(mockPost).toHaveBeenCalledTimes(1);
     });
 
-    it('maps fallback callback error after 404 to app error', async () => {
-      mockPost
-        .mockRejectedValueOnce({ response: { status: 404 }, message: 'Not Found' })
-        .mockRejectedValueOnce({ response: { status: 500 }, message: 'Boom' });
+    it('maps upstream 500 callback error to app error', async () => {
+      mockPost.mockRejectedValueOnce({ response: { status: 500 }, message: 'Boom' });
 
       await expect(markBookingPaymentFailed('b1', 'p1', 'token')).rejects.toMatchObject({
         statusCode: 502,
         code: 'BOOKING_PAYMENT_CALLBACK_FAILED',
       });
-      expect(mockPost).toHaveBeenCalledTimes(2);
+      expect(mockPost).toHaveBeenCalledTimes(1);
     });
   });
 
