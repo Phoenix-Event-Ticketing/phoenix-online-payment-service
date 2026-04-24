@@ -240,6 +240,30 @@ describe('payment.service', () => {
       expect(markBookingAsPaid).toHaveBeenCalledWith('b1', 'p1', 'tok');
     });
 
+    it('allows admin bank transfer approval directly from PENDING to SUCCESS', async () => {
+      const payment = {
+        paymentId: 'p1',
+        bookingId: 'b1',
+        paymentMethod: 'BANK_TRANSFER',
+        status: PAYMENT_STATUS.PENDING,
+        save: jest.fn().mockResolvedValue(true),
+      };
+      Payment.findOne.mockResolvedValue(payment);
+      PaymentAuditLog.create.mockResolvedValue({});
+      markBookingAsPaid.mockResolvedValue({});
+
+      const out = await paymentService.updatePaymentStatus(
+        { id: 'admin', role: 'ADMIN' },
+        'p1',
+        PAYMENT_STATUS.SUCCESS,
+        'tok',
+      );
+
+      expect(out.status).toBe(PAYMENT_STATUS.SUCCESS);
+      expect(payment.save).toHaveBeenCalledTimes(2);
+      expect(markBookingAsPaid).toHaveBeenCalledWith('b1', 'p1', 'tok');
+    });
+
     it('rejects invalid transition', async () => {
       const payment = {
         paymentId: 'p1',
@@ -279,7 +303,7 @@ describe('payment.service', () => {
       expect(markBookingPaymentFailed).toHaveBeenCalledWith('b1', 'p1', 'tok');
     });
 
-    it('records audit when markBookingAsPaid fails', async () => {
+    it('records audit and throws when markBookingAsPaid fails', async () => {
       const payment = {
         paymentId: 'p1',
         bookingId: 'b1',
@@ -290,19 +314,24 @@ describe('payment.service', () => {
       PaymentAuditLog.create.mockResolvedValue({});
       markBookingAsPaid.mockRejectedValue(new Error('booking down'));
 
-      await paymentService.updatePaymentStatus(
-        { id: 'admin', role: 'ADMIN' },
-        'p1',
-        PAYMENT_STATUS.SUCCESS,
-        'tok',
-      );
+      await expect(
+        paymentService.updatePaymentStatus(
+          { id: 'admin', role: 'ADMIN' },
+          'p1',
+          PAYMENT_STATUS.SUCCESS,
+          'tok',
+        ),
+      ).rejects.toMatchObject({
+        statusCode: 502,
+        code: 'BOOKING_SYNC_FAILED',
+      });
 
       expect(PaymentAuditLog.create).toHaveBeenCalledWith(
         expect.objectContaining({ eventType: 'BOOKING_MARK_PAID_FAILED' }),
       );
     });
 
-    it('records audit when markBookingPaymentFailed throws', async () => {
+    it('records audit and throws when markBookingPaymentFailed throws', async () => {
       const payment = {
         paymentId: 'p1',
         bookingId: 'b1',
@@ -313,12 +342,17 @@ describe('payment.service', () => {
       PaymentAuditLog.create.mockResolvedValue({});
       markBookingPaymentFailed.mockRejectedValue(new Error('callback down'));
 
-      await paymentService.updatePaymentStatus(
-        { id: 'admin', role: 'ADMIN' },
-        'p1',
-        PAYMENT_STATUS.FAILED,
-        'tok',
-      );
+      await expect(
+        paymentService.updatePaymentStatus(
+          { id: 'admin', role: 'ADMIN' },
+          'p1',
+          PAYMENT_STATUS.FAILED,
+          'tok',
+        ),
+      ).rejects.toMatchObject({
+        statusCode: 502,
+        code: 'BOOKING_SYNC_FAILED',
+      });
 
       expect(PaymentAuditLog.create).toHaveBeenCalledWith(
         expect.objectContaining({ eventType: 'BOOKING_MARK_FAILED_FAILED' }),
@@ -467,6 +501,29 @@ describe('payment.service', () => {
 
       expect(out.paymentMethod).toBe('BANK_TRANSFER');
       expect(markBookingAsPaid).toHaveBeenCalledWith('b1', 'p1', 'tok');
+    });
+
+    it('requires admin approval for bank transfer completion', async () => {
+      Payment.findOne.mockResolvedValue({
+        paymentId: 'p1',
+        bookingId: 'b1',
+        userId: 'user-1',
+        paymentMethod: 'BANK_TRANSFER',
+        status: PAYMENT_STATUS.PENDING,
+      });
+
+      await expect(
+        paymentService.completePayment(
+          { id: 'user-1', role: 'USER' },
+          'p1',
+          PAYMENT_STATUS.SUCCESS,
+          'tok',
+          'BANK_TRANSFER',
+        ),
+      ).rejects.toMatchObject({
+        statusCode: 403,
+        code: 'BANK_TRANSFER_ADMIN_APPROVAL_REQUIRED',
+      });
     });
   });
 

@@ -1,10 +1,11 @@
 const Payment = require('./payment.model');
 const PaymentAuditLog = require('./paymentAudit.model');
+const { PAYMENT_METHODS } = require('./payment.constants');
 const {
   PAYMENT_STATUS,
   canTransition,
 } = require('../../common/constants/paymentStatus');
-const { badRequest, notFound, forbidden } = require('../../common/errors');
+const { AppError, badRequest, notFound, forbidden } = require('../../common/errors');
 const {
   getBookingById,
   markBookingAsPaid,
@@ -102,6 +103,15 @@ async function getPayments(user, { all } = {}) {
 }
 
 // Helper function to handle booking marking when payment succeeds
+function normalizePaymentMethod(paymentMethod) {
+  if (!paymentMethod) return undefined;
+  const normalized = String(paymentMethod).trim().toUpperCase();
+  if (!Object.values(PAYMENT_METHODS).includes(normalized)) {
+    throw badRequest('Unsupported payment method', 'INVALID_PAYMENT_METHOD');
+  }
+  return normalized;
+}
+
 async function handleSuccessfulPayment(payment, actor, oldStatus, newStatus, authToken) {
   try {
     await markBookingAsPaid(payment.bookingId, payment.paymentId, authToken);
@@ -117,20 +127,30 @@ async function handleSuccessfulPayment(payment, actor, oldStatus, newStatus, aut
         error: err.message,
       }
     );
+    throw new AppError(
+      'Payment succeeded but booking confirmation failed',
+      502,
+      'BOOKING_SYNC_FAILED',
+      {
+        bookingId: payment.bookingId,
+        paymentId: payment.paymentId,
+      },
+    );
   }
 }
 
 function applyPaymentMethodOverride(payment, paymentMethod) {
-  if (!paymentMethod) return false;
-  const allowedPaymentMethods = new Set(['CARD', 'BANK_TRANSFER', 'WALLET']);
-  if (!allowedPaymentMethods.has(paymentMethod)) {
-    throw badRequest('Unsupported payment method', 'INVALID_PAYMENT_METHOD');
-  }
-  if (payment.paymentMethod === paymentMethod) {
+  const normalized = normalizePaymentMethod(paymentMethod);
+  if (!normalized) return false;
+  if (payment.paymentMethod === normalized) {
     return false;
   }
-  payment.paymentMethod = paymentMethod;
+  payment.paymentMethod = normalized;
   return true;
+}
+
+function isBankTransfer(payment) {
+  return payment.paymentMethod === PAYMENT_METHODS.BANK_TRANSFER;
 }
 
 async function updatePaymentStatus(actor, paymentId, newStatus, authToken, paymentMethod) {
@@ -141,6 +161,10 @@ async function updatePaymentStatus(actor, paymentId, newStatus, authToken, payme
 
   const oldStatus = payment.status;
   const methodChanged = applyPaymentMethodOverride(payment, paymentMethod);
+  const bankTransferApprovalShortcut =
+    isBankTransfer(payment)
+    && oldStatus === PAYMENT_STATUS.PENDING
+    && (newStatus === PAYMENT_STATUS.SUCCESS || newStatus === PAYMENT_STATUS.FAILED);
 
   if (oldStatus === newStatus) {
     if (methodChanged) {
@@ -166,10 +190,23 @@ async function updatePaymentStatus(actor, paymentId, newStatus, authToken, payme
     return payment;
   }
 
-  if (!canTransition(oldStatus, newStatus)) {
+  if (!canTransition(oldStatus, newStatus) && !bankTransferApprovalShortcut) {
     throw badRequest(
       `Invalid payment status transition from ${oldStatus} to ${newStatus}`,
       'INVALID_STATUS_TRANSITION',
+    );
+  }
+
+  if (bankTransferApprovalShortcut) {
+    payment.status = PAYMENT_STATUS.PROCESSING;
+    await payment.save();
+    await createAuditLog(
+      'PAYMENT_STATUS_UPDATED',
+      payment.paymentId,
+      actor.id,
+      PAYMENT_STATUS.PENDING,
+      PAYMENT_STATUS.PROCESSING,
+      { reason: 'bank transfer admin approval shortcut' },
     );
   }
 
@@ -205,6 +242,15 @@ async function updatePaymentStatus(actor, paymentId, newStatus, authToken, payme
           error: err.message,
         }
       );
+      throw new AppError(
+        'Payment failed but booking failure callback did not sync',
+        502,
+        'BOOKING_SYNC_FAILED',
+        {
+          bookingId: payment.bookingId,
+          paymentId: payment.paymentId,
+        },
+      );
     }
   }
 
@@ -219,6 +265,12 @@ async function completePayment(actor, paymentId, newStatus, authToken, paymentMe
 
   if (actor.role !== 'ADMIN' && payment.userId !== actor.id) {
     throw forbidden('You do not have access to complete this payment');
+  }
+  if (isBankTransfer(payment) && actor.role !== 'ADMIN') {
+    throw forbidden(
+      'Bank transfer payments must be approved by an admin',
+      'BANK_TRANSFER_ADMIN_APPROVAL_REQUIRED',
+    );
   }
 
   if (newStatus !== PAYMENT_STATUS.SUCCESS && newStatus !== PAYMENT_STATUS.FAILED) {
@@ -254,7 +306,7 @@ async function completePayment(actor, paymentId, newStatus, authToken, paymentMe
     );
   }
 
-  return updatePaymentStatus(actor, paymentId, newStatus, authToken);
+  return updatePaymentStatus(actor, paymentId, newStatus, authToken, paymentMethod);
 }
 
 async function cancelPayment(actor, paymentId) {
