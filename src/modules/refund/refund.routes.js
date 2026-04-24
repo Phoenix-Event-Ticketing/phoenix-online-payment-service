@@ -20,7 +20,7 @@ const router = express.Router();
 
 // Create refund request
 router.post(
-  '/api/refunds',
+  '/refunds',
   auth,
   authorize([ROLES.USER, ROLES.ADMIN]),
   mutationRateLimit,
@@ -30,7 +30,7 @@ router.post(
 
 // Process refund (admin only) - update status
 router.patch(
-  '/api/refunds/:id/status',
+  '/refunds/:id/status',
   auth,
   authorize([ROLES.ADMIN]),
   mutationRateLimit,
@@ -40,7 +40,7 @@ router.patch(
 
 // Get refund by id
 router.get(
-  '/api/refunds/:id',
+  '/refunds/:id',
   auth,
   authorize([ROLES.USER, ROLES.ADMIN]),
   validate(getRefundByIdSchema),
@@ -49,7 +49,7 @@ router.get(
 
 // Get refunds by payment id
 router.get(
-  '/api/refunds/payment/:paymentId',
+  '/refunds/payment/:paymentId',
   auth,
   authorize([ROLES.USER, ROLES.ADMIN]),
   validate(getRefundsByPaymentSchema),

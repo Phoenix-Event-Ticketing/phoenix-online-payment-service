@@ -2,14 +2,19 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 
-const env = require('./config/env');
-const { createLogger } = require('./config/logger');
-const { connectDb, disconnectDb } = require('./config/db');
-const createApp = require('./app');
+const env = require('./config/env.js');
+const { createLogger } = require('./config/logger.js');
+const { connectDb, disconnectDb } = require('./config/db.js');
+const { initTracing, shutdownTracing } = require('./observability/tracing.js');
+const createApp = require('./app.js');
 
 const logger = createLogger(env.logLevel);
 
 try {
+  await initTracing({
+    serviceName: env.otelServiceName,
+    jaegerEndpoint: env.jaegerEndpoint,
+  });
   await connectDb(logger);
 
   const app = createApp();
@@ -23,6 +28,7 @@ try {
     server.close(async () => {
       logger.info('HTTP server closed');
       await disconnectDb(logger);
+      await shutdownTracing();
       process.exit(0);
     });
   };
@@ -31,5 +37,6 @@ try {
   process.on('SIGTERM', shutdown);
 } catch (err) {
   logger.error('Failed to start payment service', { err });
+  await shutdownTracing();
   process.exit(1);
 }

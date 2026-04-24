@@ -33,7 +33,7 @@ describe('app', () => {
     const res = await request(app).get('/api/unknown');
 
     expect(res.status).toBe(404);
-    expect(res.body.success).toBe(false);
+    expect(res.body.errorCode).toBe('NOT_FOUND');
   });
 
   it('registers health routes', async () => {
@@ -43,6 +43,21 @@ describe('app', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.data.status).toBe('ok');
+  });
+
+  it('exposes /metrics', async () => {
+    const app = createApp();
+    const res = await request(app).get('/metrics');
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('payment_http_requests_total');
+  });
+
+  it('supports payment routes under canonical prefix only', async () => {
+    const app = createApp();
+
+    const canonical = await request(app).get('/payments');
+
+    expect(canonical.status).toBe(401);
   });
 
   it('serves Swagger UI at /api-docs', async () => {

@@ -1,24 +1,31 @@
 jest.mock('axios', () => {
   const mockGet = jest.fn();
-  const mockPatch = jest.fn();
+  const mockPost = jest.fn();
   return {
     create: jest.fn(() => ({
       get: mockGet,
-      patch: mockPatch,
+      post: mockPost,
     })),
     _mockGet: mockGet,
-    _mockPatch: mockPatch,
+    _mockPost: mockPost,
   };
 });
 
 jest.mock('../../config/env', () => ({
   bookingServiceBaseUrl: 'http://booking-service',
+  internalServiceId: 'payment-service',
+  serviceName: 'payment-service',
+}));
+jest.mock('../../services/internalServiceToken', () => ({
+  createInternalServiceAuthorizationHeader: jest.fn(() => 'Bearer internal-token'),
 }));
 
 const axios = require('axios');
+const { createInternalServiceAuthorizationHeader } = require('../../services/internalServiceToken');
 const {
   getBookingById,
   markBookingAsPaid,
+  markBookingPaymentFailed,
   sanitizePathParam,
 } = require('../../integrations/bookingService.client');
 
@@ -28,14 +35,14 @@ function getClient() {
 
 describe('bookingService.client', () => {
   let mockGet;
-  let mockPatch;
+  let mockPost;
 
   beforeEach(() => {
     const client = getClient();
     mockGet = client.get;
-    mockPatch = client.patch;
+    mockPost = client.post;
     mockGet.mockReset();
-    mockPatch.mockReset();
+    mockPost.mockReset();
   });
 
   describe('getBookingById', () => {
@@ -46,8 +53,8 @@ describe('bookingService.client', () => {
 
       const result = await getBookingById('b1', 'token');
 
-      expect(mockGet).toHaveBeenCalledWith('/api/bookings/b1', {
-        headers: { Authorization: 'Bearer token' },
+      expect(mockGet).toHaveBeenCalledWith('/bookings/b1', {
+        headers: { Authorization: 'Bearer token', 'X-Internal-Service-Id': 'payment-service' },
       });
       expect(result).toEqual({ id: 'b1', status: 'PENDING' });
     });
@@ -57,8 +64,8 @@ describe('bookingService.client', () => {
 
       const result = await getBookingById('b1', null);
 
-      expect(mockGet).toHaveBeenCalledWith('/api/bookings/b1', {
-        headers: undefined,
+      expect(mockGet).toHaveBeenCalledWith('/bookings/b1', {
+        headers: { Authorization: 'Bearer internal-token', 'X-Internal-Service-Id': 'payment-service' },
       });
       expect(result).toEqual({ id: 'b1' });
     });
@@ -68,8 +75,9 @@ describe('bookingService.client', () => {
 
       await getBookingById('b1', null);
 
-      expect(mockGet).toHaveBeenCalledWith('/api/bookings/b1', {
-        headers: undefined,
+      expect(createInternalServiceAuthorizationHeader).toHaveBeenCalledWith(['VIEW_BOOKINGS']);
+      expect(mockGet).toHaveBeenCalledWith('/bookings/b1', {
+        headers: { Authorization: 'Bearer internal-token', 'X-Internal-Service-Id': 'payment-service' },
       });
     });
 
@@ -79,7 +87,7 @@ describe('bookingService.client', () => {
       await getBookingById('abc-123_xyz', 'tok');
 
       expect(mockGet).toHaveBeenCalledWith(
-        '/api/bookings/abc-123_xyz',
+        '/bookings/abc-123_xyz',
         expect.any(Object),
       );
     });
@@ -90,26 +98,154 @@ describe('bookingService.client', () => {
       );
       expect(mockGet).not.toHaveBeenCalled();
     });
+
+    it('maps upstream 401 to unauthorized app error', async () => {
+      mockGet.mockRejectedValueOnce({
+        response: { status: 401 },
+        message: 'Request failed with status code 401',
+      });
+
+      await expect(getBookingById('b1', 'token')).rejects.toMatchObject({
+        statusCode: 401,
+        code: 'BOOKING_LOOKUP_FAILED',
+      });
+      expect(mockGet).toHaveBeenCalledTimes(1);
+    });
+
+    it('retries with /api prefix only when first call is 404', async () => {
+      mockGet
+        .mockRejectedValueOnce({ response: { status: 404 }, message: 'Not Found' })
+        .mockResolvedValueOnce({ data: { data: { id: 'b1' } } });
+
+      const result = await getBookingById('b1', 'token');
+
+      expect(mockGet).toHaveBeenCalledTimes(2);
+      expect(mockGet).toHaveBeenNthCalledWith(1, '/bookings/b1', {
+        headers: { Authorization: 'Bearer token', 'X-Internal-Service-Id': 'payment-service' },
+      });
+      expect(mockGet).toHaveBeenNthCalledWith(2, '/api/bookings/b1', {
+        headers: { Authorization: 'Bearer token', 'X-Internal-Service-Id': 'payment-service' },
+      });
+      expect(result).toEqual({ id: 'b1' });
+    });
+
+    it('maps fallback lookup failure after 404 retry', async () => {
+      mockGet
+        .mockRejectedValueOnce({ response: { status: 404 }, message: 'Not Found' })
+        .mockRejectedValueOnce({ response: { status: 404 }, message: 'Still not found' });
+
+      await expect(getBookingById('b1', 'token')).rejects.toMatchObject({
+        statusCode: 404,
+        code: 'BOOKING_LOOKUP_FAILED',
+      });
+      expect(mockGet).toHaveBeenCalledTimes(2);
+    });
+
+    it('maps upstream 400 to bad request app error', async () => {
+      mockGet.mockRejectedValueOnce({
+        response: { status: 400, data: { message: 'Bad booking payload' } },
+      });
+
+      await expect(getBookingById('b1', 'token')).rejects.toMatchObject({
+        statusCode: 400,
+        code: 'BOOKING_LOOKUP_FAILED',
+      });
+      expect(mockGet).toHaveBeenCalledTimes(1);
+    });
+
+    it('merges context headers into outbound request', async () => {
+      mockGet.mockResolvedValue({ data: { id: 'b1' } });
+
+      await getBookingById('b1', 'token', { 'X-Request-Id': 'rid-1' });
+
+      expect(mockGet).toHaveBeenCalledWith('/bookings/b1', {
+        headers: {
+          Authorization: 'Bearer token',
+          'X-Internal-Service-Id': 'payment-service',
+          'X-Request-Id': 'rid-1',
+        },
+      });
+    });
+
+    it('returns res.data when top-level data has no nested data property', async () => {
+      mockGet.mockResolvedValue({ data: undefined });
+
+      const result = await getBookingById('b1', 'token');
+
+      expect(result).toBeUndefined();
+    });
+
+    it('maps network-style errors without response to 502', async () => {
+      mockGet.mockRejectedValueOnce(new Error('ECONNRESET'));
+
+      await expect(getBookingById('b1', 'token')).rejects.toMatchObject({
+        statusCode: 502,
+        code: 'BOOKING_LOOKUP_FAILED',
+        details: {
+          upstreamStatus: null,
+          upstreamMessage: 'ECONNRESET',
+        },
+      });
+    });
+
+    it('includes upstream JSON message in details when booking returns 500', async () => {
+      mockGet.mockRejectedValueOnce({
+        response: {
+          status: 500,
+          data: { message: 'Simulated booking failure' },
+        },
+      });
+
+      await expect(getBookingById('b1', 'token')).rejects.toMatchObject({
+        statusCode: 502,
+        code: 'BOOKING_LOOKUP_FAILED',
+        details: {
+          upstreamStatus: 500,
+          upstreamMessage: 'Simulated booking failure',
+        },
+      });
+    });
+
+    it('maps direct upstream 404 to not found when no fallback retry applies', async () => {
+      mockGet.mockRejectedValueOnce({
+        response: { status: 404 },
+      });
+      // First call is 404 so retry happens; force retry to non-404 mapped notFound by mapper.
+      mockGet.mockRejectedValueOnce({
+        response: { status: 404 },
+      });
+
+      await expect(getBookingById('b1', null)).rejects.toMatchObject({
+        statusCode: 404,
+        code: 'BOOKING_LOOKUP_FAILED',
+      });
+      expect(mockGet).toHaveBeenCalledTimes(2);
+    });
   });
 
   describe('markBookingAsPaid', () => {
-    it('patches booking with paymentId and returns data', async () => {
-      mockPatch.mockResolvedValue({
+    it('posts callback with success status and returns data', async () => {
+      mockPost.mockResolvedValue({
         data: { data: { id: 'b1', paymentId: 'p1' } },
       });
 
       const result = await markBookingAsPaid('b1', 'p1', 'token');
 
-      expect(mockPatch).toHaveBeenCalledWith(
-        '/api/bookings/b1/pay',
-        { paymentId: 'p1' },
-        { headers: { Authorization: 'Bearer token' } },
+      expect(mockPost).toHaveBeenCalledWith(
+        '/bookings/payment-callback',
+        {
+          bookingId: 'b1',
+          paymentReferenceId: 'p1',
+          paymentStatus: 'SUCCESS',
+          transactionId: 'p1',
+        },
+        { headers: { Authorization: 'Bearer token', 'X-Internal-Service-Id': 'payment-service' } },
       );
       expect(result).toEqual({ id: 'b1', paymentId: 'p1' });
     });
 
     it('returns res.data when res.data.data is absent', async () => {
-      mockPatch.mockResolvedValue({ data: { id: 'b1' } });
+      mockPost.mockResolvedValue({ data: { id: 'b1' } });
 
       const result = await markBookingAsPaid('b1', 'p1', null);
 
@@ -117,13 +253,18 @@ describe('bookingService.client', () => {
     });
 
     it('sanitizes both bookingId and paymentId', async () => {
-      mockPatch.mockResolvedValue({ data: {} });
+      mockPost.mockResolvedValue({ data: {} });
 
       await markBookingAsPaid('b1', 'pay-1', 'tok');
 
-      expect(mockPatch).toHaveBeenCalledWith(
-        '/api/bookings/b1/pay',
-        { paymentId: 'pay-1' },
+      expect(mockPost).toHaveBeenCalledWith(
+        '/bookings/payment-callback',
+        {
+          bookingId: 'b1',
+          paymentReferenceId: 'pay-1',
+          paymentStatus: 'SUCCESS',
+          transactionId: 'pay-1',
+        },
         expect.any(Object),
       );
     });
@@ -132,7 +273,90 @@ describe('bookingService.client', () => {
       await expect(markBookingAsPaid('../x', 'p1', 'tok')).rejects.toThrow(
         'invalid characters',
       );
-      expect(mockPatch).not.toHaveBeenCalled();
+      expect(mockPost).not.toHaveBeenCalled();
+    });
+
+    it('merges context headers on payment callback', async () => {
+      mockPost.mockResolvedValue({ data: {} });
+
+      await markBookingAsPaid('b1', 'p1', 'token', { 'X-Correlation-Id': 'c1' });
+
+      expect(mockPost).toHaveBeenCalledWith(
+        '/bookings/payment-callback',
+        expect.any(Object),
+        {
+          headers: {
+            Authorization: 'Bearer token',
+            'X-Internal-Service-Id': 'payment-service',
+            'X-Correlation-Id': 'c1',
+          },
+        },
+      );
+    });
+
+    it('retries callback with /api prefix on 404', async () => {
+      mockPost
+        .mockRejectedValueOnce({ response: { status: 404 }, message: 'Not Found' })
+        .mockResolvedValueOnce({ data: { data: { ok: true } } });
+
+      const result = await markBookingAsPaid('b1', 'p1', 'token');
+
+      expect(mockPost).toHaveBeenCalledTimes(2);
+      expect(mockPost).toHaveBeenNthCalledWith(
+        1,
+        '/bookings/payment-callback',
+        expect.objectContaining({ paymentStatus: 'SUCCESS' }),
+        { headers: { Authorization: 'Bearer token', 'X-Internal-Service-Id': 'payment-service' } },
+      );
+      expect(mockPost).toHaveBeenNthCalledWith(
+        2,
+        '/api/bookings/payment-callback',
+        expect.objectContaining({ paymentStatus: 'SUCCESS' }),
+        { headers: { Authorization: 'Bearer token', 'X-Internal-Service-Id': 'payment-service' } },
+      );
+      expect(result).toEqual({ ok: true });
+    });
+  });
+
+  describe('markBookingPaymentFailed', () => {
+    it('posts callback with failed status', async () => {
+      mockPost.mockResolvedValue({ data: { ok: true } });
+      await markBookingPaymentFailed('b1', 'p1', 'token');
+      expect(mockPost).toHaveBeenCalledWith(
+        '/bookings/payment-callback',
+        {
+          bookingId: 'b1',
+          paymentReferenceId: 'p1',
+          paymentStatus: 'FAILED',
+          transactionId: 'p1',
+        },
+        { headers: { Authorization: 'Bearer token', 'X-Internal-Service-Id': 'payment-service' } },
+      );
+    });
+
+    it('maps upstream 403 callback error to forbidden app error', async () => {
+      mockPost.mockRejectedValueOnce({
+        response: { status: 403 },
+        message: 'Forbidden',
+      });
+
+      await expect(markBookingPaymentFailed('b1', 'p1', 'token')).rejects.toMatchObject({
+        statusCode: 403,
+        code: 'BOOKING_PAYMENT_CALLBACK_FAILED',
+      });
+      expect(mockPost).toHaveBeenCalledTimes(1);
+    });
+
+    it('maps fallback callback error after 404 to app error', async () => {
+      mockPost
+        .mockRejectedValueOnce({ response: { status: 404 }, message: 'Not Found' })
+        .mockRejectedValueOnce({ response: { status: 500 }, message: 'Boom' });
+
+      await expect(markBookingPaymentFailed('b1', 'p1', 'token')).rejects.toMatchObject({
+        statusCode: 502,
+        code: 'BOOKING_PAYMENT_CALLBACK_FAILED',
+      });
+      expect(mockPost).toHaveBeenCalledTimes(2);
     });
   });
 

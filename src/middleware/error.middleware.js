@@ -24,6 +24,15 @@ function errorHandler(err, req, res, next) {
     stack: err.stack,
   });
 
+  // Keep upstream booking auth failures simple and client-friendly.
+  if (code === 'BOOKING_SERVICE_AUTH_REJECTED') {
+    return res.status(401).json({
+      error: 'Unauthorized',
+      status: 401,
+      message: 'Invalid or expired JWT token',
+    });
+  }
+
   return sendError(res, statusCode, message, code, err.details);
 }
 
