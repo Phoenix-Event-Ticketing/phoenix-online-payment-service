@@ -34,12 +34,14 @@ describe('refund.service', () => {
 
   describe('requestRefund', () => {
     it('creates refund for successful payment owned by user', async () => {
-      Payment.findOne.mockResolvedValue({
+      const payment = {
         paymentId: 'p1',
         userId: 'user-1',
         status: PAYMENT_STATUS.SUCCESS,
         amount: 100,
-      });
+        save: jest.fn().mockResolvedValue(true),
+      };
+      Payment.findOne.mockResolvedValue(payment);
       const refundDoc = { refundId: 'r1', refundAmount: 50 };
       Refund.create.mockResolvedValue(refundDoc);
       PaymentAuditLog.create.mockResolvedValue({});
@@ -52,6 +54,8 @@ describe('refund.service', () => {
 
       expect(r.refundId).toBe('r1');
       expect(Refund.create).toHaveBeenCalled();
+      expect(payment.status).toBe(PAYMENT_STATUS.REFUNDED);
+      expect(payment.save).toHaveBeenCalled();
     });
 
     it('rejects non-string paymentId', async () => {
@@ -70,6 +74,7 @@ describe('refund.service', () => {
         userId: 'user-1',
         status: PAYMENT_STATUS.PENDING,
         amount: 100,
+        save: jest.fn(),
       });
 
       await expect(
@@ -99,6 +104,7 @@ describe('refund.service', () => {
         userId: 'user-1',
         status: PAYMENT_STATUS.SUCCESS,
         amount: 100,
+        save: jest.fn(),
       });
 
       await expect(
@@ -116,6 +122,7 @@ describe('refund.service', () => {
         userId: 'other-user',
         status: PAYMENT_STATUS.SUCCESS,
         amount: 100,
+        save: jest.fn(),
       });
 
       await expect(

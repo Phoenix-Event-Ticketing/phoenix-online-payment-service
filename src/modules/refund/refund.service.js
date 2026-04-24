@@ -54,11 +54,15 @@ async function requestRefund(user, payload) {
     refundStatus: REFUND_STATUS.REQUESTED,
   });
 
+  const oldPaymentStatus = payment.status;
+  payment.status = PAYMENT_STATUS.REFUNDED;
+  await payment.save();
+
   await PaymentAuditLog.create({
     eventType: 'REFUND_REQUESTED',
     paymentId: safePaymentId,
     actorId: user.id,
-    oldStatus: payment.status,
+    oldStatus: oldPaymentStatus,
     newStatus: payment.status,
     metadata: {
       refundId: refund.refundId,
