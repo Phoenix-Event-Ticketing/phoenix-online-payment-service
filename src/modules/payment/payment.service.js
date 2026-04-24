@@ -339,6 +339,35 @@ async function cancelPayment(actor, paymentId) {
     PAYMENT_STATUS.CANCELLED
   );
 
+  try {
+    await markBookingPaymentFailed(
+      payment.bookingId,
+      payment.transactionReference || payment.paymentId,
+      undefined,
+    );
+  } catch (err) {
+    await createAuditLog(
+      'BOOKING_MARK_FAILED_FAILED',
+      payment.paymentId,
+      actor.id,
+      oldStatus,
+      PAYMENT_STATUS.CANCELLED,
+      {
+        bookingId: payment.bookingId,
+        error: err.message,
+      }
+    );
+    throw new AppError(
+      'Payment cancelled but booking failure callback did not sync',
+      502,
+      'BOOKING_SYNC_FAILED',
+      {
+        bookingId: payment.bookingId,
+        paymentId: payment.paymentId,
+      },
+    );
+  }
+
   return payment;
 }
 

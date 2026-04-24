@@ -564,15 +564,42 @@ describe('payment.service', () => {
     it('cancels PENDING payment for owner', async () => {
       const payment = {
         paymentId: 'p1',
+        bookingId: 'b1',
         userId: 'user-1',
         status: PAYMENT_STATUS.PENDING,
         save: jest.fn().mockResolvedValue(true),
       };
       Payment.findOne.mockResolvedValue(payment);
       PaymentAuditLog.create.mockResolvedValue({});
+      markBookingPaymentFailed.mockResolvedValue({});
 
       const out = await paymentService.cancelPayment(user, 'p1');
       expect(out.status).toBe(PAYMENT_STATUS.CANCELLED);
+      expect(markBookingPaymentFailed).toHaveBeenCalledWith('b1', 'p1', undefined);
+    });
+
+    it('throws when booking callback fails after cancellation', async () => {
+      const payment = {
+        paymentId: 'p1',
+        bookingId: 'b1',
+        userId: 'user-1',
+        status: PAYMENT_STATUS.PENDING,
+        save: jest.fn().mockResolvedValue(true),
+      };
+      Payment.findOne.mockResolvedValue(payment);
+      PaymentAuditLog.create.mockResolvedValue({});
+      markBookingPaymentFailed.mockRejectedValue(new Error('callback down'));
+
+      await expect(
+        paymentService.cancelPayment(user, 'p1'),
+      ).rejects.toMatchObject({
+        statusCode: 502,
+        code: 'BOOKING_SYNC_FAILED',
+      });
+
+      expect(PaymentAuditLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({ eventType: 'BOOKING_MARK_FAILED_FAILED' }),
+      );
     });
   });
 
