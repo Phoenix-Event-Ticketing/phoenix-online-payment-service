@@ -230,7 +230,7 @@ describe('payment.controller', () => {
   describe('handleUpdatePaymentStatus', () => {
     it('passes token and status', async () => {
       req.params = { id: 'p1' };
-      req.body = { status: 'SUCCESS' };
+      req.body = { status: 'SUCCESS', paymentMethod: 'WALLET' };
       req.headers.authorization = 'Bearer tok';
       req.user = { id: 'a1', role: 'ADMIN' };
       const payment = { paymentId: 'p1', status: 'SUCCESS' };
@@ -243,6 +243,7 @@ describe('payment.controller', () => {
         'p1',
         'SUCCESS',
         'tok',
+        'WALLET',
       );
       expect(success).toHaveBeenCalledWith(res, payment);
     });

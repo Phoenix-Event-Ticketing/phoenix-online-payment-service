@@ -120,15 +120,41 @@ async function handleSuccessfulPayment(payment, actor, oldStatus, newStatus, aut
   }
 }
 
-async function updatePaymentStatus(actor, paymentId, newStatus, authToken) {
+function applyPaymentMethodOverride(payment, paymentMethod) {
+  if (!paymentMethod) return false;
+  const allowedPaymentMethods = new Set(['CARD', 'BANK_TRANSFER', 'WALLET']);
+  if (!allowedPaymentMethods.has(paymentMethod)) {
+    throw badRequest('Unsupported payment method', 'INVALID_PAYMENT_METHOD');
+  }
+  if (payment.paymentMethod === paymentMethod) {
+    return false;
+  }
+  payment.paymentMethod = paymentMethod;
+  return true;
+}
+
+async function updatePaymentStatus(actor, paymentId, newStatus, authToken, paymentMethod) {
   const payment = await Payment.findOne({ paymentId });
   if (!payment) {
     throw notFound('Payment not found');
   }
 
   const oldStatus = payment.status;
+  const methodChanged = applyPaymentMethodOverride(payment, paymentMethod);
 
   if (oldStatus === newStatus) {
+    if (methodChanged) {
+      await payment.save();
+      await createAuditLog(
+        'PAYMENT_METHOD_UPDATED',
+        payment.paymentId,
+        actor.id,
+        oldStatus,
+        newStatus,
+        { paymentMethod }
+      );
+      return payment;
+    }
     await createAuditLog(
       'PAYMENT_STATUS_NOOP',
       payment.paymentId,
@@ -199,13 +225,7 @@ async function completePayment(actor, paymentId, newStatus, authToken, paymentMe
     throw badRequest('Unsupported completion status', 'INVALID_COMPLETION_STATUS');
   }
 
-  if (paymentMethod) {
-    const allowedPaymentMethods = new Set(['CARD', 'BANK_TRANSFER', 'WALLET']);
-    if (!allowedPaymentMethods.has(paymentMethod)) {
-      throw badRequest('Unsupported payment method', 'INVALID_PAYMENT_METHOD');
-    }
-    payment.paymentMethod = paymentMethod;
-  }
+  applyPaymentMethodOverride(payment, paymentMethod);
 
   if (payment.status === newStatus) {
     await createAuditLog(

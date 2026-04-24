@@ -192,6 +192,32 @@ describe('payment.service', () => {
       expect(markBookingAsPaid).not.toHaveBeenCalled();
     });
 
+    it('updates payment method even on duplicate status update', async () => {
+      const payment = {
+        paymentId: 'p1',
+        bookingId: 'b1',
+        paymentMethod: 'CARD',
+        status: PAYMENT_STATUS.PENDING,
+        save: jest.fn().mockResolvedValue(true),
+      };
+      Payment.findOne.mockResolvedValue(payment);
+      PaymentAuditLog.create.mockResolvedValue({});
+
+      const out = await paymentService.updatePaymentStatus(
+        { id: 'user-1', role: 'USER' },
+        'p1',
+        PAYMENT_STATUS.PENDING,
+        'tok',
+        'BANK_TRANSFER',
+      );
+
+      expect(out.paymentMethod).toBe('BANK_TRANSFER');
+      expect(payment.save).toHaveBeenCalled();
+      expect(PaymentAuditLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({ eventType: 'PAYMENT_METHOD_UPDATED' }),
+      );
+    });
+
     it('updates status and calls booking on SUCCESS', async () => {
       const payment = {
         paymentId: 'p1',

@@ -51,6 +51,7 @@ const updatePaymentStatusSchema = {
   }),
   body: z.object({
     status: z.enum(Object.values(PAYMENT_STATUS)),
+    paymentMethod: z.enum(['CARD', 'BANK_TRANSFER', 'WALLET']).optional(),
   }),
 };
 
